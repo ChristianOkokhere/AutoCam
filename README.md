@@ -90,8 +90,10 @@ Best experience in terminals that speak the **Kitty graphics protocol**:
 ```bash
 pip install autocam
 export ANTHROPIC_API_KEY=sk-ant-...
-autocam path/to/photo.arw
+create path/to/photo.arw   # launches the TUI with the photo loaded
 ```
+
+The installed package is named `autocam`; the command you run is `create`.
 
 ## License
 

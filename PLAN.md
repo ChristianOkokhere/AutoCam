@@ -280,7 +280,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 0 — Foundations (0.5 day)
+### Phase 0 — Foundations (0.5 day) — **Status: DONE**
+
+**Shipped:** 2026-04-23 on `feat/phase-0-scaffolding`. DoD met: `uv run python -m autocam` prints the banner and `uv run pytest` passes. Repo structure, `pyproject.toml`, ruff, gitignore, dev script, smoke tests all in place.
 
 **Goal:** Repo is runnable, tests pass, CI green.
 
@@ -296,7 +298,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 1 — Core pipeline MVP (2–3 days)
+### Phase 1 — Core pipeline MVP (2–3 days) — **Status: DONE**
+
+**Shipped:** 2026-04-23 on `feat/phase-1-core-pipeline`. 13 ops implemented (tone ×6, color ×3, curve, crop, sharpen, export.save), JSON edit stack with registry-based dispatch, executor with preview downscale, CLI `create apply`. 38 passing tests cover every op, stack round-trips, executor end-to-end, and CLI.
 
 **Goal:** Apply a JSON edit stack to a JPEG/TIFF and render the result. No TUI, no LLM.
 
@@ -305,7 +309,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 - `pipeline/executor.py` — applies ops sequentially, caches intermediate states.
 - `pipeline/preview.py` — reads image, applies stack, returns a preview-sized PIL image.
 - **Ops (v1):** `tone.exposure`, `tone.contrast`, `tone.highlights`, `tone.shadows`, `tone.whites`, `tone.blacks`, `color.white_balance`, `color.saturation`, `color.vibrance`, `curve.rgb`, `geom.crop`, `detail.sharpen`, `export.save`.
-- CLI: `autocam apply --stack edits.json --in photo.jpg --out out.jpg`.
+- CLI: `create apply --stack edits.json --in photo.jpg --out out.jpg`.
 - Fixture images + unit tests comparing against golden outputs.
 
 **Decisions resolved**
@@ -321,9 +325,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 2 — TUI shell (2 days)
+### Phase 2 — TUI shell (2 days) — **Status: NEXT**
 
-**Goal:** Textual app with three panes, image preview renders, manual op insertion works end-to-end.
+**Goal:** Textual app with three panes, image preview renders, manual op insertion works end-to-end. Bare `create` (no args) launches the TUI; `create apply ...` keeps the one-shot batch mode.
 
 **Deliverables**
 - `tui/screen.py` — three-pane layout: chat (left), preview (center), history (right).
@@ -466,7 +470,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 **Goal:** "Apply this look to the other 49 photos."
 
 **Deliverables**
-- `autocam batch` CLI taking a stack + glob of inputs.
+- `create batch` CLI taking a stack + glob of inputs.
 - TUI: `:batch apply <stack> <glob>` and `:batch match <ref> <glob>`.
 - Batch export with filename templating (`{name}_{stack_id}.jpg`).
 - Parallelism via a worker pool (CPU-bound; `ProcessPoolExecutor`).
@@ -494,22 +498,62 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
+### Phase 10 — Distribution & one-line install (1.5 days) — **Status: PENDING**
+
+**Goal:** `curl -fsSL <url> | sh` on a clean macOS or Linux box installs AutoCam and leaves `create` on `$PATH`. No manual Python or venv steps.
+
+**Deliverables**
+- PyPI publish pipeline:
+  - GitHub Actions workflow that publishes on version-tag push.
+  - PyPI trusted publishing (OIDC, no stored API key).
+  - `autocam` name claimed on PyPI; first release tagged `v0.1.0`.
+- `install.sh` bootstrap script:
+  - Detects `uv`; runs uv's official installer if missing.
+  - Runs `uv tool install autocam`.
+  - Prints `create --help` on success, with a single-line next-step hint.
+  - Hosted at a stable URL (GitHub Pages on the repo, or a short domain if we pick one up).
+- README `## Install` section in preference order:
+  1. `curl -fsSL <url> | sh` (bootstrap)
+  2. `uv tool install autocam`
+  3. `pipx install autocam`
+- `create --version` flag wired through to `autocam.__version__`.
+
+**Decisions resolved**
+- Command name stays `create`; package name stays `autocam`.
+- Semver. First public release is `0.1.0` — pre-1.0 is honest for a tool this new.
+- No Homebrew formula in v1; kept as a nice-to-have for later.
+
+**Risks**
+- PyPI name availability — claim `autocam` early, before we open anything to the public.
+- Install script has to handle the "no `curl` / corp firewall / offline" fallbacks. Keep it minimal; document manual steps for those cases.
+
+**Open questions**
+- Stable host for `install.sh` — GitHub Pages off the repo, or a dedicated short domain (`autocam.sh` or similar)?
+- Windows support path — WSL only, or native via `uv`? Probably defer; macOS + Linux first.
+
+**Effort:** 1.5 days.
+
+---
+
 ## 11. Total scope & sequencing
 
-| Phase | Days | Cumulative |
-|---|---|---|
-| 0 — Foundations | 0.5 | 0.5 |
-| 1 — Core pipeline | 2.5 | 3 |
-| 2 — TUI shell | 2 | 5 |
-| 3 — LLM loop | 2 | 7 |
-| 4 — Recipes + prompt | 1.5 | 8.5 |
-| 5 — RAW | 2.5 | 11 |
-| 6 — Semantic masks | 3.5 | 14.5 |
-| 7 — Structure / composite | 1.5 | 16 |
-| 8 — Multi-image | 1.5 | 17.5 |
-| 9 — Polish | 2 | 19.5 |
+| Phase | Days | Cumulative | Status |
+|---|---|---|---|
+| 0 — Foundations | 0.5 | 0.5 | **DONE** (2026-04-23) |
+| 1 — Core pipeline | 2.5 | 3 | **DONE** (2026-04-23) |
+| 2 — TUI shell | 2 | 5 | **NEXT** |
+| 3 — LLM loop | 2 | 7 | pending |
+| 4 — Recipes + prompt | 1.5 | 8.5 | pending |
+| 5 — RAW | 2.5 | 11 | pending |
+| 6 — Semantic masks | 3.5 | 14.5 | pending |
+| 7 — Structure / composite | 1.5 | 16 | pending |
+| 8 — Multi-image | 1.5 | 17.5 | pending |
+| 9 — Polish | 2 | 19.5 | pending |
+| 10 — Distribution | 1.5 | 21 | pending |
 
-**~20 days of focused work** to a serviceable v1. Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer.
+**Cumulative shipped:** Phase 0 + Phase 1 = 3 days of plan (actual wall-clock: one session).
+
+**~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
 ## 12. Risks & open questions
 
@@ -554,12 +598,16 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 0 — scaffold the repo. On a thumbs-up, I'll:
+Phase 2 — TUI shell. Concrete work:
 
-1. Write `pyproject.toml` (uv-based) with pinned deps for Phase 1.
-2. Create the `src/autocam/` skeleton.
-3. Wire a trivial `autocam` entrypoint that loads an image and applies a no-op pipeline.
-4. Add a smoke test.
-5. Commit as `chore: scaffold Phase 0 foundations`.
+1. Add `textual` to runtime deps.
+2. `src/autocam/tui/screen.py` — three-pane layout (chat left, preview center, history right).
+3. `src/autocam/tui/widgets/preview.py` — image widget using the Kitty graphics protocol (auto-detects iTerm2 as fallback).
+4. `src/autocam/tui/widgets/history.py` — live view over the current edit stack.
+5. `src/autocam/tui/widgets/chat.py` — scrollable log + input box (just echoes for now; Phase 3 wires Claude).
+6. Command mode: `:add tone.exposure ev=0.3` to manually insert ops for end-to-end testing.
+7. Update `cli.main` so bare `create` (no subcommand) launches the TUI instead of printing the banner; keep `create apply ...` for one-shot batch mode.
 
-Then Phase 1 tools land one file at a time, each with its own tests, each with its own commit — so you can review as we go.
+**DoD:** `create path/to/photo.jpg` opens the TUI, shows the image, and `:add` / undo visibly change the preview.
+
+Phase 1 tools land in the pipeline already — no op work needed in Phase 2, it's purely presentation + manual op wiring.

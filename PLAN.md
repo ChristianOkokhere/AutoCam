@@ -498,6 +498,43 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
+### Phase 10 — Distribution & one-line install (1.5 days) — **Status: PENDING**
+
+**Goal:** `curl -fsSL <url> | sh` on a clean macOS or Linux box installs AutoCam and leaves `create` on `$PATH`. No manual Python or venv steps.
+
+**Deliverables**
+- PyPI publish pipeline:
+  - GitHub Actions workflow that publishes on version-tag push.
+  - PyPI trusted publishing (OIDC, no stored API key).
+  - `autocam` name claimed on PyPI; first release tagged `v0.1.0`.
+- `install.sh` bootstrap script:
+  - Detects `uv`; runs uv's official installer if missing.
+  - Runs `uv tool install autocam`.
+  - Prints `create --help` on success, with a single-line next-step hint.
+  - Hosted at a stable URL (GitHub Pages on the repo, or a short domain if we pick one up).
+- README `## Install` section in preference order:
+  1. `curl -fsSL <url> | sh` (bootstrap)
+  2. `uv tool install autocam`
+  3. `pipx install autocam`
+- `create --version` flag wired through to `autocam.__version__`.
+
+**Decisions resolved**
+- Command name stays `create`; package name stays `autocam`.
+- Semver. First public release is `0.1.0` — pre-1.0 is honest for a tool this new.
+- No Homebrew formula in v1; kept as a nice-to-have for later.
+
+**Risks**
+- PyPI name availability — claim `autocam` early, before we open anything to the public.
+- Install script has to handle the "no `curl` / corp firewall / offline" fallbacks. Keep it minimal; document manual steps for those cases.
+
+**Open questions**
+- Stable host for `install.sh` — GitHub Pages off the repo, or a dedicated short domain (`autocam.sh` or similar)?
+- Windows support path — WSL only, or native via `uv`? Probably defer; macOS + Linux first.
+
+**Effort:** 1.5 days.
+
+---
+
 ## 11. Total scope & sequencing
 
 | Phase | Days | Cumulative | Status |
@@ -512,10 +549,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 7 — Structure / composite | 1.5 | 16 | pending |
 | 8 — Multi-image | 1.5 | 17.5 | pending |
 | 9 — Polish | 2 | 19.5 | pending |
+| 10 — Distribution | 1.5 | 21 | pending |
 
 **Cumulative shipped:** Phase 0 + Phase 1 = 3 days of plan (actual wall-clock: one session).
 
-**~20 days of focused work** to a serviceable v1. Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer.
+**~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
 ## 12. Risks & open questions
 

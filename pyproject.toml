@@ -23,7 +23,9 @@ dependencies = [
 ]
 
 [project.scripts]
-autocam = "autocam.cli:main"
+# The installed command is `create` (short, verb-first, claude-code-esque).
+# The Python package stays `autocam` — `pip install autocam`, `import autocam`.
+create = "autocam.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ChristianOkokhere/AutoCam"

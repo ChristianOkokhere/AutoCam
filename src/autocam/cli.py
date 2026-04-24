@@ -29,7 +29,7 @@ def _apply(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="autocam", description="AutoCam CLI.")
+    parser = argparse.ArgumentParser(prog="create", description="AutoCam CLI.")
     sub = parser.add_subparsers(dest="cmd")
 
     apply_p = sub.add_parser("apply", help="Apply an edit stack to an image.")
@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not hasattr(args, "func"):
         print(BANNER)
-        print("Usage: autocam apply --stack <stack.json> --in <photo.jpg> --out <out.jpg>")
+        print("Usage: create apply --stack <stack.json> --in <photo.jpg> --out <out.jpg>")
         return 0
     return args.func(args)
 

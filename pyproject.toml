@@ -16,11 +16,14 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Multimedia :: Graphics :: Editors",
 ]
-# Phase 0 ships with no runtime deps. Image / TUI / LLM deps land in later phases.
-dependencies = []
+# Phase 1: image I/O + pipeline runtime. TUI / LLM / RAW deps land later.
+dependencies = [
+    "numpy>=2.0",
+    "pillow>=11.0",
+]
 
 [project.scripts]
-autocam = "autocam.__main__:main"
+autocam = "autocam.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ChristianOkokhere/AutoCam"

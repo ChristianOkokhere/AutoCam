@@ -56,6 +56,7 @@ class QuitCommand:
 @dataclass
 class ChatMessage:
     text: str
+    deep: bool = False  # ``/deep <msg>`` → escalate next turn to Opus
 
 
 Command = AddCommand | UndoCommand | RedoCommand | OpenCommand | QuitCommand | ChatMessage
@@ -69,6 +70,11 @@ def parse_command(line: str) -> Command:
     line = line.strip()
     if not line:
         raise CommandError("empty input")
+    if line.startswith("/deep"):
+        rest = line[len("/deep") :].strip()
+        if not rest:
+            raise CommandError("/deep needs a message: `/deep make the sky pop`")
+        return ChatMessage(text=rest, deep=True)
     if not line.startswith(":"):
         return ChatMessage(text=line)
 

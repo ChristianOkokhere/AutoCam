@@ -6,8 +6,9 @@ Layout::
     │ Chat (1fr)  │  Preview (2fr)        │ History (1fr) │
     └── Footer ────────────────────────────────────────────┘
 
-Phase 2 wires manual op insertion via colon commands. The chat is just an
-echo loop today; Phase 3 swaps in the Claude tool-use loop.
+Phase 3 wires the Claude tool-use loop into the chat pane: any non-``:``
+input is treated as natural language and runs through ``llm.loop.run_turn``.
+``/deep <message>`` escalates that single turn to Claude Opus.
 """
 
 from __future__ import annotations
@@ -21,7 +22,17 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
+from textual.worker import Worker
 
+from autocam.llm.client import DEEP_MODEL, DEFAULT_MODEL, LLMClient, env_has_api_key
+from autocam.llm.loop import (
+    ErrorEvent,
+    Event,
+    StopEvent,
+    TextEvent,
+    ToolEvent,
+    run_turn,
+)
 from autocam.pipeline.color import linear_to_srgb
 from autocam.pipeline.executor import run_stack
 from autocam.pipeline.stack import EditStack, source_hash
@@ -76,6 +87,7 @@ class AutoCamApp(App[None]):
         super().__init__()
         self.stack: EditStack = EditStack(source="")
         self._undo: list[Op] = []
+        self._llm_busy: bool = False
         self._pending_source: Path | None = (
             Path(image_path).expanduser().resolve() if image_path else None
         )
@@ -100,7 +112,8 @@ class AutoCamApp(App[None]):
                 self._refresh_preview()
         else:
             chat.write("Welcome to AutoCam.")
-            chat.write("Use `:open <path>`, `:add <op> k=v`, `:undo`, `:redo`, `:quit`.")
+            chat.write("`:open <path>` to load a photo, then describe edits in plain English.")
+            chat.write("Manual ops: `:add <op> k=v`, `:undo`, `:redo`. `/deep <msg>` uses Opus.")
         self.query_one(HistoryPane).update_from(self.stack)
         chat.focus_input()
 
@@ -115,10 +128,7 @@ class AutoCamApp(App[None]):
             return
 
         if isinstance(cmd, ChatMessage):
-            chat.write(
-                "LLM not yet wired (Phase 3). Use :add / :undo / :redo / :open / :quit.",
-                role="system",
-            )
+            self._handle_chat(cmd)
             return
         if isinstance(cmd, OpenCommand):
             self._handle_open(cmd.path)
@@ -162,6 +172,82 @@ class AutoCamApp(App[None]):
         chat.write(f"+ {op.describe()}")
         self.query_one(HistoryPane).update_from(self.stack)
         self._refresh_preview()
+
+    # ── LLM chat ──────────────────────────────────────────────────────
+
+    def _handle_chat(self, cmd: ChatMessage) -> None:
+        chat = self.query_one(ChatPane)
+        if not self.stack.source:
+            chat.write("no image loaded — `:open <path>` first", role="error")
+            return
+        if not env_has_api_key():
+            chat.write(
+                "ANTHROPIC_API_KEY not set — export it before chatting.",
+                role="error",
+            )
+            return
+        if self._llm_busy:
+            chat.write("a turn is already in flight — wait for it to finish", role="error")
+            return
+        model = DEEP_MODEL if cmd.deep else DEFAULT_MODEL
+        self._llm_busy = True
+        self._run_llm_turn(cmd.text, model)
+
+    def _llm_emit(self, event: Event) -> None:
+        """Translate loop events to UI updates. Runs on the UI thread."""
+        chat = self.query_one(ChatPane)
+        if isinstance(event, TextEvent):
+            chat.write(event.text)
+        elif isinstance(event, ToolEvent):
+            chat.write(f"+ tool {event.op_name}({event.params})")
+            self._undo.clear()
+            self.query_one(HistoryPane).update_from(self.stack)
+        elif isinstance(event, ErrorEvent):
+            chat.write(event.message, role="error")
+        elif isinstance(event, StopEvent):
+            self._llm_busy = False
+
+    def _llm_show_preview(self, arr: np.ndarray) -> None:
+        """Push a freshly rendered array into the preview pane."""
+        display = linear_to_srgb(arr.astype(np.float32))
+        arr8 = np.clip(display * 255.0, 0, 255).astype(np.uint8)
+        pil = PILImage.fromarray(arr8)
+        preview = self.query_one(PreviewPane)
+        preview.show_image(
+            pil,
+            status=f"{Path(self.stack.source).name}  {pil.width}x{pil.height}",
+        )
+
+    def _run_llm_turn(self, user_text: str, model: str) -> Worker[None]:
+        client = LLMClient()
+
+        def refresh(stack: EditStack) -> np.ndarray:
+            arr = run_stack(stack, preview=True)
+            self.call_from_thread(self._llm_show_preview, arr)
+            return arr
+
+        def emit(event: Event) -> None:
+            self.call_from_thread(self._llm_emit, event)
+
+        def work() -> None:
+            try:
+                run_turn(
+                    client=client,
+                    stack=self.stack,
+                    user_text=user_text,
+                    refresh_preview=refresh,
+                    model=model,
+                    on_event=emit,
+                )
+            except Exception as exc:
+                self.call_from_thread(
+                    self.query_one(ChatPane).write,
+                    f"LLM error: {exc}",
+                    role="error",
+                )
+                self.call_from_thread(self._llm_emit, StopEvent(reason="error"))
+
+        return self.run_worker(work, thread=True, exclusive=True, group="llm")
 
     # ── undo / redo ───────────────────────────────────────────────────
 

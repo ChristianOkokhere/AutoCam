@@ -24,6 +24,19 @@ def test_parse_chat_message_passes_through() -> None:
     cmd = parse_command("warm the highlights")
     assert isinstance(cmd, ChatMessage)
     assert cmd.text == "warm the highlights"
+    assert cmd.deep is False
+
+
+def test_parse_deep_chat_message() -> None:
+    cmd = parse_command("/deep make the sky pop")
+    assert isinstance(cmd, ChatMessage)
+    assert cmd.text == "make the sky pop"
+    assert cmd.deep is True
+
+
+def test_parse_deep_without_message_errors() -> None:
+    with pytest.raises(CommandError):
+        parse_command("/deep")
 
 
 def test_parse_add_with_params() -> None:

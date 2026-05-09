@@ -83,7 +83,7 @@ Best experience in terminals that speak the **Kitty graphics protocol**:
 
 ## Status
 
-**Pre-alpha — Phase 2 shipped.** Core non-destructive pipeline (13 ops) and the three-pane Textual TUI both work today; LLM integration is next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
+**Pre-alpha — Phase 3 shipped.** Core non-destructive pipeline (13 ops), three-pane Textual TUI, and the Claude vision + tool-use loop all work today. With `ANTHROPIC_API_KEY` set, you can type plain-English edits and watch the preview update. Recipe library + critique mode is next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
 
 ## Quick start (future)
 

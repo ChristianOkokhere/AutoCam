@@ -16,9 +16,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Multimedia :: Graphics :: Editors",
 ]
-# Phase 1: image I/O + pipeline runtime. Phase 2 adds the TUI.
-# LLM / RAW deps land later.
+# Phase 3 lands the LLM loop. RAW / mask deps come later.
 dependencies = [
+    "anthropic>=0.100",
     "numpy>=2.0",
     "pillow>=11.0",
     "textual>=0.86",
@@ -40,6 +40,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/autocam"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/autocam/llm/prompts" = "autocam/llm/prompts"
 
 [dependency-groups]
 dev = [

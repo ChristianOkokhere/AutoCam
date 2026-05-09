@@ -83,7 +83,7 @@ Best experience in terminals that speak the **Kitty graphics protocol**:
 
 ## Status
 
-**Pre-alpha — no code yet.** See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
+**Pre-alpha — Phase 2 shipped.** Core non-destructive pipeline (13 ops) and the three-pane Textual TUI both work today; LLM integration is next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
 
 ## Quick start (future)
 

@@ -325,7 +325,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 2 — TUI shell (2 days) — **Status: NEXT**
+### Phase 2 — TUI shell (2 days) — **Status: DONE**
+
+**Shipped:** 2026-05-08 on `chore/create-command-and-plan-progress`. Three-pane Textual app (chat | preview | history), `textual-image` for inline image rendering with TGP/Sixel/halfcell auto-detection. Colon command parser (`:add op.name k=v`, `:undo`, `:redo`, `:open`, `:quit`) coerces values via op dataclass field types. Bare `create` launches the TUI; `create <path>` loads that image; `create apply ...` keeps the batch mode. 19 new tests (parser + builder + Textual pilot smoke), 57 passing total.
 
 **Goal:** Textual app with three panes, image preview renders, manual op insertion works end-to-end. Bare `create` (no args) launches the TUI; `create apply ...` keeps the one-shot batch mode.
 
@@ -335,10 +337,10 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 - `tui/widgets/history.py` — live-updates from the edit stack.
 - `tui/widgets/chat.py` — scrollable log, input box.
 - Command mode: `:add tone.exposure ev=0.3` for manual testing.
-- File picker for initial image load.
+- File picker for initial image load. *(Deferred — `:open <path>` covers it for now; modal picker can land in Phase 9 polish.)*
 
 **Decisions resolved**
-- Use `textual-image` or equivalent for protocol detection.
+- Use `textual-image` or equivalent for protocol detection. *(Picked `textual-image` 0.12.)*
 - Target resolution: preview widget sizes to pane, pipeline regenerates at requested size.
 
 **Risks**
@@ -348,7 +350,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 3 — LLM integration (2 days)
+### Phase 3 — LLM integration (2 days) — **Status: NEXT**
 
 **Goal:** Type English, get edits.
 
@@ -541,8 +543,8 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 |---|---|---|---|
 | 0 — Foundations | 0.5 | 0.5 | **DONE** (2026-04-23) |
 | 1 — Core pipeline | 2.5 | 3 | **DONE** (2026-04-23) |
-| 2 — TUI shell | 2 | 5 | **NEXT** |
-| 3 — LLM loop | 2 | 7 | pending |
+| 2 — TUI shell | 2 | 5 | **DONE** (2026-05-08) |
+| 3 — LLM loop | 2 | 7 | **NEXT** |
 | 4 — Recipes + prompt | 1.5 | 8.5 | pending |
 | 5 — RAW | 2.5 | 11 | pending |
 | 6 — Semantic masks | 3.5 | 14.5 | pending |
@@ -551,7 +553,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 9 — Polish | 2 | 19.5 | pending |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0 + Phase 1 = 3 days of plan (actual wall-clock: one session).
+**Cumulative shipped:** Phase 0 + Phase 1 + Phase 2 = 5 days of plan.
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -598,16 +600,20 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 2 — TUI shell. Concrete work:
+Phase 3 — LLM integration. Concrete work:
 
-1. Add `textual` to runtime deps.
-2. `src/autocam/tui/screen.py` — three-pane layout (chat left, preview center, history right).
-3. `src/autocam/tui/widgets/preview.py` — image widget using the Kitty graphics protocol (auto-detects iTerm2 as fallback).
-4. `src/autocam/tui/widgets/history.py` — live view over the current edit stack.
-5. `src/autocam/tui/widgets/chat.py` — scrollable log + input box (just echoes for now; Phase 3 wires Claude).
-6. Command mode: `:add tone.exposure ev=0.3` to manually insert ops for end-to-end testing.
-7. Update `cli.main` so bare `create` (no subcommand) launches the TUI instead of printing the banner; keep `create apply ...` for one-shot batch mode.
+1. Add `anthropic` to runtime deps; load `ANTHROPIC_API_KEY` via `python-dotenv`.
+2. `src/autocam/llm/client.py` — Anthropic SDK wrapper with retry + streaming.
+3. `src/autocam/llm/tools.py` — auto-generate Anthropic tool definitions from each registered Op (JSONSchema from dataclass field types + docstrings).
+4. `src/autocam/llm/loop.py` — vision + tool-use loop:
+   - Build user message: latest preview PNG (≤1024px long edge) + compact stack JSON + user text.
+   - Call `claude-sonnet-4-6`, `tool_choice: auto`, prompt-cache the system prompt.
+   - On each tool call: validate, append to `EditStack`, regenerate preview, return `{ok, preview_hash, histogram_summary}`.
+   - Loop until `stop_reason == "end_turn"`.
+5. `src/autocam/llm/prompts/system.md` — role + tool taxonomy + chaining guidance.
+6. Wire `ChatPane.Submitted` (non-`:` text) into the loop; stream tokens into the chat log.
+7. `/deep` command in chat → switch the next turn to `claude-opus-4-7`.
 
-**DoD:** `create path/to/photo.jpg` opens the TUI, shows the image, and `:add` / undo visibly change the preview.
+**DoD:** With `ANTHROPIC_API_KEY` set, typing *"warm the highlights and lift the shadows a touch"* into the chat causes Claude to call `tone.highlights` + `tone.shadows` (and any colour ops it picks), the stack updates, and the preview regenerates — all without the user touching a slider.
 
-Phase 1 tools land in the pipeline already — no op work needed in Phase 2, it's purely presentation + manual op wiring.
+Phase 1 ops are reused as-is — Phase 3 is purely the LLM loop + tool surface generation.

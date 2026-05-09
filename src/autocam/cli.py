@@ -1,4 +1,9 @@
-"""AutoCam CLI — Phase 1 supports ``apply``."""
+"""AutoCam CLI.
+
+* ``create``                      → launches the TUI (no image loaded)
+* ``create path/to/photo.jpg``   → launches the TUI with that photo loaded
+* ``create apply --stack ...``   → one-shot batch mode (Phase 1)
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,8 @@ from autocam import BANNER
 from autocam.io.image import save_image
 from autocam.pipeline.executor import run_stack
 from autocam.pipeline.stack import EditStack
+
+_SUBCOMMANDS = {"apply"}
 
 
 def _apply(args: argparse.Namespace) -> int:
@@ -28,11 +35,22 @@ def _apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def _launch_tui(image_path: Path | None) -> int:
+    # Imported lazily so `create apply ...` doesn't pay the Textual import cost.
+    from autocam.tui.screen import run as run_tui
+
+    run_tui(image_path=image_path)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="create", description="AutoCam CLI.")
+    parser = argparse.ArgumentParser(
+        prog="create",
+        description="AutoCam — natural-language photo editor in your terminal.",
+    )
     sub = parser.add_subparsers(dest="cmd")
 
-    apply_p = sub.add_parser("apply", help="Apply an edit stack to an image.")
+    apply_p = sub.add_parser("apply", help="Apply an edit stack to an image (no TUI).")
     apply_p.add_argument("--stack", type=Path, required=True, help="Path to edit stack JSON.")
     apply_p.add_argument(
         "--in",
@@ -60,13 +78,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if not hasattr(args, "func"):
-        print(BANNER)
-        print("Usage: create apply --stack <stack.json> --in <photo.jpg> --out <out.jpg>")
+    args = sys.argv[1:] if argv is None else list(argv)
+
+    if args and args[0] in {"-h", "--help"}:
+        build_parser().parse_args(args)
         return 0
-    return args.func(args)
+    if args and args[0] == "--version":
+        from autocam import __version__
+
+        print(__version__)
+        return 0
+
+    if not args:
+        return _launch_tui(image_path=None)
+
+    if args[0] not in _SUBCOMMANDS and not args[0].startswith("-"):
+        # Treat as `create <image_path>`.
+        path = Path(args[0]).expanduser()
+        if not path.exists():
+            print(BANNER)
+            print(f"error: no such file: {path}", file=sys.stderr)
+            return 2
+        return _launch_tui(image_path=path)
+
+    parsed = build_parser().parse_args(args)
+    if not hasattr(parsed, "func"):
+        return _launch_tui(image_path=None)
+    return parsed.func(parsed)
 
 
 if __name__ == "__main__":

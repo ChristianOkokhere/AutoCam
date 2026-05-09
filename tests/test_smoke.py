@@ -1,4 +1,4 @@
-"""Phase 0 smoke tests — prove the package imports and the entrypoint runs."""
+"""Smoke tests — prove the package imports and the entrypoint runs."""
 
 from __future__ import annotations
 
@@ -13,9 +13,8 @@ def test_version_is_set() -> None:
     assert autocam.__version__.count(".") >= 2
 
 
-def test_main_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
-    result = main([])
+def test_main_version_flag_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(["--version"])
     captured = capsys.readouterr()
-    assert result == 0
-    assert "autocam" in captured.out.lower()
-    assert "photo editor" in captured.out.lower()
+    assert code == 0
+    assert autocam.__version__ in captured.out

@@ -1,4 +1,4 @@
-"""Tests for the CLI `apply` subcommand."""
+"""Tests for the CLI."""
 
 from __future__ import annotations
 
@@ -34,9 +34,36 @@ def test_cli_apply_writes_output(fixture_jpeg: Path, tmp_path: Path) -> None:
     assert out_path.exists()
 
 
-def test_cli_no_args_prints_banner(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_no_args_launches_tui(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[Path | None] = []
+
+    def fake_run(image_path: Path | None = None) -> None:
+        calls.append(image_path)
+
+    monkeypatch.setattr("autocam.tui.screen.run", fake_run)
     code = main([])
-    captured = capsys.readouterr()
     assert code == 0
-    assert "autocam" in captured.out.lower()
-    assert "photo editor" in captured.out.lower()
+    assert calls == [None]
+
+
+def test_cli_path_arg_launches_tui_with_image(
+    fixture_jpeg: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[Path | None] = []
+
+    def fake_run(image_path: Path | None = None) -> None:
+        calls.append(image_path)
+
+    monkeypatch.setattr("autocam.tui.screen.run", fake_run)
+    code = main([str(fixture_jpeg)])
+    assert code == 0
+    assert calls == [fixture_jpeg.expanduser()]
+
+
+def test_cli_path_arg_missing_file_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = main([str(tmp_path / "does-not-exist.jpg")])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "no such file" in captured.err

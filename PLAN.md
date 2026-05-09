@@ -350,7 +350,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 3 — LLM integration (2 days) — **Status: NEXT**
+### Phase 3 — LLM integration (2 days) — **Status: DONE**
+
+**Shipped:** 2026-05-09 on `feat/phase-3-llm-integration`. Anthropic SDK pinned (`>=0.100`); `llm/tools.py` auto-generates a JSONSchema tool surface from the live op registry (single-source of truth — adding an op anywhere extends the surface). `llm/loop.py` runs the vision + tool-use loop: preview PNG (≤1024px) + compact stack JSON + user text → Claude Sonnet 4.6 with the cached system prompt → execute each tool against the stack with rollback on failure → return histogram summaries in tool_result so the model can self-correct → loop until end_turn or `MAX_TURNS=8`. The TUI wires non-`:` chat into a Textual worker, surfaces `TextEvent`/`ToolEvent`/`ErrorEvent` into chat + history, and `/deep <msg>` escalates that one turn to Opus 4.7. 23 new tests (tool surface + client + mocked-SDK loop + parser /deep), 80 passing total.
 
 **Goal:** Type English, get edits.
 
@@ -544,8 +546,8 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 0 — Foundations | 0.5 | 0.5 | **DONE** (2026-04-23) |
 | 1 — Core pipeline | 2.5 | 3 | **DONE** (2026-04-23) |
 | 2 — TUI shell | 2 | 5 | **DONE** (2026-05-08) |
-| 3 — LLM loop | 2 | 7 | **NEXT** |
-| 4 — Recipes + prompt | 1.5 | 8.5 | pending |
+| 3 — LLM loop | 2 | 7 | **DONE** (2026-05-09) |
+| 4 — Recipes + prompt | 1.5 | 8.5 | **NEXT** |
 | 5 — RAW | 2.5 | 11 | pending |
 | 6 — Semantic masks | 3.5 | 14.5 | pending |
 | 7 — Structure / composite | 1.5 | 16 | pending |
@@ -553,7 +555,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 9 — Polish | 2 | 19.5 | pending |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0 + Phase 1 + Phase 2 = 5 days of plan.
+**Cumulative shipped:** Phase 0 + Phase 1 + Phase 2 + Phase 3 = 7 days of plan.
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -600,20 +602,23 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 3 — LLM integration. Concrete work:
+Phase 4 — Recipe library + prompt engineering. Concrete work:
 
-1. Add `anthropic` to runtime deps; load `ANTHROPIC_API_KEY` via `python-dotenv`.
-2. `src/autocam/llm/client.py` — Anthropic SDK wrapper with retry + streaming.
-3. `src/autocam/llm/tools.py` — auto-generate Anthropic tool definitions from each registered Op (JSONSchema from dataclass field types + docstrings).
-4. `src/autocam/llm/loop.py` — vision + tool-use loop:
-   - Build user message: latest preview PNG (≤1024px long edge) + compact stack JSON + user text.
-   - Call `claude-sonnet-4-6`, `tool_choice: auto`, prompt-cache the system prompt.
-   - On each tool call: validate, append to `EditStack`, regenerate preview, return `{ok, preview_hash, histogram_summary}`.
-   - Loop until `stop_reason == "end_turn"`.
-5. `src/autocam/llm/prompts/system.md` — role + tool taxonomy + chaining guidance.
-6. Wire `ChatPane.Submitted` (non-`:` text) into the loop; stream tokens into the chat log.
-7. `/deep` command in chat → switch the next turn to `claude-opus-4-7`.
+1. `knowledge/fundamentals/` — three docs: `exposure.md`, `color_theory.md`, `working_color_spaces.md`. These set the language Claude reasons in.
+2. `knowledge/recipes/` — five seed recipes covering canonical scenarios:
+   - `portraits/natural_skin_tones.md`
+   - `landscape/golden_hour.md`
+   - `bw/classic_film.md`
+   - `cinematic/teal_and_orange.md`
+   - `fixes/underexposed_recovery.md`
 
-**DoD:** With `ANTHROPIC_API_KEY` set, typing *"warm the highlights and lift the shadows a touch"* into the chat causes Claude to call `tone.highlights` + `tone.shadows` (and any colour ops it picks), the stack updates, and the preview regenerates — all without the user touching a slider.
+   Each follows the frontmatter schema in §9 (id, tags, trigger_keywords, body sections).
+3. `llm/recipes.py` — recipe loader that reads everything in `knowledge/`, sorts deterministically, and bundles it into the cached system prompt block.
+4. Wire the loader into `llm.client.system_blocks()` so the recipes ship inside the cached system block (single cache breakpoint, big payload, infrequent change → maximum hit rate).
+5. Critique mode: a `/critique` chat command that runs one turn with `tool_choice: none` so Claude evaluates the photo without editing.
+6. A few-shot example block at the end of the system prompt showing one ideal "warm the highlights, lift the shadows" tool-call sequence.
+7. Token budget: assert at startup that the bundled system prompt + recipes is ≤ 20k tokens (rough heuristic via `len(text) // 4`); fail loud if we exceed.
 
-Phase 1 ops are reused as-is — Phase 3 is purely the LLM loop + tool surface generation.
+**DoD:** With `ANTHROPIC_API_KEY` set, typing *"give this a teal-and-orange cinematic look"* causes Claude to follow the bundled recipe — colour grade + saturation tweaks in roughly the order the recipe specifies — and `/critique <thoughts on this photo>` produces a paragraph of analysis without mutating the stack.
+
+Phase 1–3 components are reused as-is. Phase 4 is mostly markdown plus the loader and one new chat command.

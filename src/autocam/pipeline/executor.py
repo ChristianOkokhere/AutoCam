@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image
 
-from autocam.io.image import load_image
+from autocam.io import load_any
 from autocam.ops import Op, PipelineCtx
 from autocam.pipeline.color import linear_to_srgb, srgb_to_linear
 from autocam.pipeline.stack import EditStack
@@ -42,7 +42,7 @@ def run_stack(
 ) -> Float32Array:
     """Execute a stack and return the final linear-sRGB float32 image."""
     source_path = Path(source) if source is not None else Path(stack.source)
-    img = load_image(source_path)
+    img = load_any(source_path, preview=preview)
     if preview:
         img = _resize_to_max(img, PREVIEW_MAX_EDGE)
 

@@ -40,6 +40,7 @@ from autocam.tui.commands import (
     AddCommand,
     ChatMessage,
     CommandError,
+    CritiqueCommand,
     OpenCommand,
     QuitCommand,
     RedoCommand,
@@ -130,6 +131,9 @@ class AutoCamApp(App[None]):
         if isinstance(cmd, ChatMessage):
             self._handle_chat(cmd)
             return
+        if isinstance(cmd, CritiqueCommand):
+            self._handle_critique(cmd)
+            return
         if isinstance(cmd, OpenCommand):
             self._handle_open(cmd.path)
             return
@@ -177,21 +181,35 @@ class AutoCamApp(App[None]):
 
     def _handle_chat(self, cmd: ChatMessage) -> None:
         chat = self.query_one(ChatPane)
+        if not self._llm_preconditions_ok(chat):
+            return
+        model = DEEP_MODEL if cmd.deep else DEFAULT_MODEL
+        self._llm_busy = True
+        self._run_llm_turn(cmd.text, model=model, tool_choice=None)
+
+    def _handle_critique(self, cmd: CritiqueCommand) -> None:
+        chat = self.query_one(ChatPane)
+        if not self._llm_preconditions_ok(chat):
+            return
+        prompt = cmd.text or "Critique this photograph. What's working, what isn't?"
+        chat.write("(critique mode — Claude reads only)")
+        self._llm_busy = True
+        self._run_llm_turn(prompt, model=DEFAULT_MODEL, tool_choice={"type": "none"})
+
+    def _llm_preconditions_ok(self, chat: ChatPane) -> bool:
         if not self.stack.source:
             chat.write("no image loaded — `:open <path>` first", role="error")
-            return
+            return False
         if not env_has_api_key():
             chat.write(
                 "ANTHROPIC_API_KEY not set — export it before chatting.",
                 role="error",
             )
-            return
+            return False
         if self._llm_busy:
             chat.write("a turn is already in flight — wait for it to finish", role="error")
-            return
-        model = DEEP_MODEL if cmd.deep else DEFAULT_MODEL
-        self._llm_busy = True
-        self._run_llm_turn(cmd.text, model)
+            return False
+        return True
 
     def _llm_emit(self, event: Event) -> None:
         """Translate loop events to UI updates. Runs on the UI thread."""
@@ -218,7 +236,13 @@ class AutoCamApp(App[None]):
             status=f"{Path(self.stack.source).name}  {pil.width}x{pil.height}",
         )
 
-    def _run_llm_turn(self, user_text: str, model: str) -> Worker[None]:
+    def _run_llm_turn(
+        self,
+        user_text: str,
+        *,
+        model: str,
+        tool_choice: dict | None,
+    ) -> Worker[None]:
         client = LLMClient()
 
         def refresh(stack: EditStack) -> np.ndarray:
@@ -237,6 +261,7 @@ class AutoCamApp(App[None]):
                     user_text=user_text,
                     refresh_preview=refresh,
                     model=model,
+                    tool_choice=tool_choice,
                     on_event=emit,
                 )
             except Exception as exc:

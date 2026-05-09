@@ -39,6 +39,22 @@ def test_parse_deep_without_message_errors() -> None:
         parse_command("/deep")
 
 
+def test_parse_critique_with_text() -> None:
+    from autocam.tui.commands import CritiqueCommand
+
+    cmd = parse_command("/critique focus on the skin tones")
+    assert isinstance(cmd, CritiqueCommand)
+    assert cmd.text == "focus on the skin tones"
+
+
+def test_parse_critique_without_text() -> None:
+    from autocam.tui.commands import CritiqueCommand
+
+    cmd = parse_command("/critique")
+    assert isinstance(cmd, CritiqueCommand)
+    assert cmd.text == ""
+
+
 def test_parse_add_with_params() -> None:
     cmd = parse_command(":add tone.exposure ev=0.5")
     assert isinstance(cmd, AddCommand)

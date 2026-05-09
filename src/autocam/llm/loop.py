@@ -73,6 +73,7 @@ class _ClientLike(Protocol):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         max_tokens: int = ...,
+        tool_choice: dict[str, Any] | None = ...,
     ) -> Any: ...
 
 
@@ -188,10 +189,15 @@ def run_turn(
     model: str = DEFAULT_MODEL,
     system: list[dict[str, Any]] | None = None,
     tools: list[dict[str, Any]] | None = None,
+    tool_choice: dict[str, Any] | None = None,
     on_event: Callable[[Event], None] | None = None,
     max_turns: int = MAX_TURNS,
 ) -> EditStack:
-    """Drive one user turn end-to-end, mutating ``stack``."""
+    """Drive one user turn end-to-end, mutating ``stack``.
+
+    Pass ``tool_choice={"type": "none"}`` to forbid tool calls — the loop
+    becomes a single round-trip and ``stack`` is left untouched.
+    """
     if system is None:
         system = system_blocks()
     if tools is None:
@@ -214,6 +220,7 @@ def run_turn(
             system=system,
             messages=messages,
             tools=tools,
+            tool_choice=tool_choice,
         )
         blocks = [_normalise(b) for b in response.content]
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from autocam.llm.client import (
     DEEP_MODEL,
     DEFAULT_MODEL,
+    build_full_system_text,
     env_has_api_key,
     load_system_prompt,
     system_blocks,
@@ -31,6 +32,25 @@ def test_system_blocks_caches_system() -> None:
             "cache_control": {"type": "ephemeral"},
         }
     ]
+
+
+def test_default_system_blocks_bundles_recipes_and_fewshot() -> None:
+    [block] = system_blocks()
+    text = block["text"]
+    assert "AutoCam" in text  # base prompt
+    assert "# Fundamentals" in text  # knowledge bundle
+    assert "# Recipes" in text
+    assert "# Worked example" in text  # few-shot trailer
+    assert block["cache_control"] == {"type": "ephemeral"}
+
+
+def test_build_full_system_text_orders_sections() -> None:
+    text = build_full_system_text(
+        base_prompt="BASE",
+        knowledge="MID",
+        few_shot="FOOT",
+    )
+    assert text.index("BASE") < text.index("MID") < text.index("FOOT")
 
 
 def test_env_has_api_key_reads_env(monkeypatch) -> None:

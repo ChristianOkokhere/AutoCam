@@ -381,7 +381,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 4 — Recipe library + prompt engineering (1–2 days)
+### Phase 4 — Recipe library + prompt engineering (1–2 days) — **Status: DONE**
+
+**Shipped:** 2026-05-09 on `feat/phase-4-recipes-and-critique`. 3 fundamentals docs (exposure, color theory, working color spaces) + 5 seed recipes (portraits, golden-hour landscape, classic-film B&W, teal-and-orange cinematic, underexposed recovery), all under `src/autocam/knowledge/`. `llm/recipes.py` parses YAML-like frontmatter, sorts by file path for deterministic cache hits, and enforces a soft 80k-char budget (≈20k tokens). `llm/client.build_full_system_text()` bundles base prompt + knowledge + a worked-example trailer into one cached system block (~4.6k tokens total today). `/critique [text]` runs a single round-trip with `tool_choice={"type": "none"}` so Claude evaluates the photo without mutating the stack. 15 new tests (parser + bundle + budget + tool_choice plumbing), 95 passing total.
 
 **Goal:** The LLM edits with *taste*, not just competence.
 
@@ -403,7 +405,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 5 — RAW support (2–3 days)
+### Phase 5 — RAW support (2–3 days) — **Status: NEXT**
 
 **Goal:** Open `.arw`, `.nef`, `.cr2`, `.dng`, `.raf` and edit.
 
@@ -547,15 +549,15 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 1 — Core pipeline | 2.5 | 3 | **DONE** (2026-04-23) |
 | 2 — TUI shell | 2 | 5 | **DONE** (2026-05-08) |
 | 3 — LLM loop | 2 | 7 | **DONE** (2026-05-09) |
-| 4 — Recipes + prompt | 1.5 | 8.5 | **NEXT** |
-| 5 — RAW | 2.5 | 11 | pending |
+| 4 — Recipes + prompt | 1.5 | 8.5 | **DONE** (2026-05-09) |
+| 5 — RAW | 2.5 | 11 | **NEXT** |
 | 6 — Semantic masks | 3.5 | 14.5 | pending |
 | 7 — Structure / composite | 1.5 | 16 | pending |
 | 8 — Multi-image | 1.5 | 17.5 | pending |
 | 9 — Polish | 2 | 19.5 | pending |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0 + Phase 1 + Phase 2 + Phase 3 = 7 days of plan.
+**Cumulative shipped:** Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 4 = 8.5 days of plan.
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -602,23 +604,26 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 4 — Recipe library + prompt engineering. Concrete work:
+Phase 5 — RAW support. Concrete work:
 
-1. `knowledge/fundamentals/` — three docs: `exposure.md`, `color_theory.md`, `working_color_spaces.md`. These set the language Claude reasons in.
-2. `knowledge/recipes/` — five seed recipes covering canonical scenarios:
-   - `portraits/natural_skin_tones.md`
-   - `landscape/golden_hour.md`
-   - `bw/classic_film.md`
-   - `cinematic/teal_and_orange.md`
-   - `fixes/underexposed_recovery.md`
+1. Add `rawpy` (LibRaw wrapper) to runtime deps. Note any platform install prerequisites in the README.
+2. `src/autocam/io/raw.py` — `load_raw(path)` returns linear float32 via `rawpy.imread(...).postprocess(...)` with sensible defaults: AHD demosaic, camera-embedded WB, no auto-bright.
+3. Detect RAW vs raster by extension and dispatch in `executor.run_stack`'s loader path. Common extensions: `.arw`, `.nef`, `.cr2`, `.cr3`, `.dng`, `.raf`, `.orf`, `.rw2`.
+4. New ops in `src/autocam/ops/raw.py`:
+   - `raw.develop(wb, highlights, black)` — high-level develop knob.
+   - `raw.demosaic(algo)` — `Literal["ahd", "vng", "ppg", "linear"]`.
+   - `raw.camera_profile(file|name)` — record intent; full ICC handling deferred.
+5. Dual pipeline:
+   - **Preview path:** `postprocess(half_size=True, ...)` for a quick thumb at ≤2048px.
+   - **Export path:** `postprocess(output_bps=16, no_auto_bright=True, ...)` → 16-bit linear normalised to `[0, 1]`.
+6. EXIF preservation: read source EXIF via `exifread` (or similar) and re-embed on the JPEG/TIFF export.
+7. Tests with small fixture RAWs from 3+ camera makes (Sony ARW, Canon CR2, Nikon NEF). Bundle pre-trimmed tiny fixtures rather than depending on real camera files.
 
-   Each follows the frontmatter schema in §9 (id, tags, trigger_keywords, body sections).
-3. `llm/recipes.py` — recipe loader that reads everything in `knowledge/`, sorts deterministically, and bundles it into the cached system prompt block.
-4. Wire the loader into `llm.client.system_blocks()` so the recipes ship inside the cached system block (single cache breakpoint, big payload, infrequent change → maximum hit rate).
-5. Critique mode: a `/critique` chat command that runs one turn with `tool_choice: none` so Claude evaluates the photo without editing.
-6. A few-shot example block at the end of the system prompt showing one ideal "warm the highlights, lift the shadows" tool-call sequence.
-7. Token budget: assert at startup that the bundled system prompt + recipes is ≤ 20k tokens (rough heuristic via `len(text) // 4`); fail loud if we exceed.
+**DoD:** `create photo.arw` opens the RAW, the preview renders within ~1s, and natural-language edits flow through the same loop. `create apply --stack edits.json --in photo.arw --out out.jpg` produces a full-resolution export.
 
-**DoD:** With `ANTHROPIC_API_KEY` set, typing *"give this a teal-and-orange cinematic look"* causes Claude to follow the bundled recipe — colour grade + saturation tweaks in roughly the order the recipe specifies — and `/critique <thoughts on this photo>` produces a paragraph of analysis without mutating the stack.
+**Risks**
 
-Phase 1–3 components are reused as-is. Phase 4 is mostly markdown plus the loader and one new chat command.
+- Per-camera quirks (Fuji X-Trans, Sigma Foveon) — scope: handle Bayer cleanly in v1; X-Trans may look soft.
+- Memory on 60MP RAWs during export — mitigation: tile via libvips when file size > 50 MB.
+
+Phase 1–4 ops are reused as-is on the resulting linear array; Phase 5 is mostly the loader plus three new ops.

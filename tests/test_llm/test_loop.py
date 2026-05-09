@@ -257,6 +257,31 @@ def test_run_turn_passes_through_tool_choice_auto(fixture_jpeg: Path) -> None:
     assert "color_white_balance" in names
 
 
+def test_run_turn_tool_choice_none_keeps_stack_clean(fixture_jpeg: Path) -> None:
+    """`/critique` mode passes tool_choice={'type': 'none'}; stack stays empty."""
+    stack = EditStack(source=str(fixture_jpeg))
+    fake = FakeClient(
+        [
+            FakeResponse(
+                content=[FakeBlock(type="text", text="The shadows are slightly muddy.")],
+                stop_reason="end_turn",
+            )
+        ]
+    )
+    events: list[Any] = []
+    run_turn(
+        client=fake,
+        stack=stack,
+        user_text="critique this",
+        refresh_preview=_refresh,
+        tool_choice={"type": "none"},
+        on_event=events.append,
+    )
+    assert stack.ops == []
+    assert fake.calls[0]["tool_choice"] == {"type": "none"}
+    assert any(isinstance(e, TextEvent) and "shadows" in e.text for e in events)
+
+
 @pytest.fixture
 def loaded_array(fixture_jpeg: Path) -> np.ndarray:
     return load_image(fixture_jpeg)

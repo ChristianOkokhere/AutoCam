@@ -59,7 +59,22 @@ class ChatMessage:
     deep: bool = False  # ``/deep <msg>`` → escalate next turn to Opus
 
 
-Command = AddCommand | UndoCommand | RedoCommand | OpenCommand | QuitCommand | ChatMessage
+@dataclass
+class CritiqueCommand:
+    """``/critique [thoughts]`` — text-only Claude pass, stack untouched."""
+
+    text: str = ""
+
+
+Command = (
+    AddCommand
+    | UndoCommand
+    | RedoCommand
+    | OpenCommand
+    | QuitCommand
+    | ChatMessage
+    | CritiqueCommand
+)
 
 
 class CommandError(ValueError):
@@ -75,6 +90,9 @@ def parse_command(line: str) -> Command:
         if not rest:
             raise CommandError("/deep needs a message: `/deep make the sky pop`")
         return ChatMessage(text=rest, deep=True)
+    if line.startswith("/critique"):
+        rest = line[len("/critique") :].strip()
+        return CritiqueCommand(text=rest)
     if not line.startswith(":"):
         return ChatMessage(text=line)
 

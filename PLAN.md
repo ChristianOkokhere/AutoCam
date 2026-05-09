@@ -405,7 +405,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 5 — RAW support (2–3 days) — **Status: NEXT**
+### Phase 5 — RAW support (2–3 days) — **Status: DONE (5a)**
+
+**Shipped:** 2026-05-09 on `feat/phase-5-raw-support`. `rawpy>=0.27` (LibRaw 0.22.1 wheels) wired in. `io/raw.py` exposes `load_raw(path, *, preview)` returning `(H, W, 3)` linear-sRGB float32 in `[0, 1]` via `postprocess(gamma=(1, 1), output_color=sRGB, output_bps=16, use_camera_wb=True, no_auto_bright=True, demosaic=AHD)`. `preview=True` flips on rawpy's `half_size` for ~4× faster previews. `io.load_any` dispatches by extension (.arw/.cr2/.cr3/.crw/.dng/.nef/.orf/.pef/.raf/.rw2/.srw); the executor calls it transparently, so the entire chat / TUI / batch pipeline now opens RAW files alongside JPEG / PNG / TIFF. 7 new tests (mocked rawpy: extension dispatch, postprocess kwargs contract, half-size preview, raster fall-through), 102 passing total.
+
+**5b carved out:** dedicated `raw.develop` / `raw.demosaic` ops were deferred — they imply re-running rawpy on every preview, which conflicts with the current "ops mutate the live linear buffer" model. Today's defaults (camera WB, AHD, no auto-bright) are good enough for the DoD; redevelop as ops returns when we have a real user need.
 
 **Goal:** Open `.arw`, `.nef`, `.cr2`, `.dng`, `.raf` and edit.
 
@@ -430,7 +434,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 6 — Semantic masks + local adjustments (3–4 days)
+### Phase 6 — Semantic masks + local adjustments (3–4 days) — **Status: NEXT**
 
 **Goal:** "Darken the sky, warm only the skin." Just works.
 
@@ -550,14 +554,14 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 2 — TUI shell | 2 | 5 | **DONE** (2026-05-08) |
 | 3 — LLM loop | 2 | 7 | **DONE** (2026-05-09) |
 | 4 — Recipes + prompt | 1.5 | 8.5 | **DONE** (2026-05-09) |
-| 5 — RAW | 2.5 | 11 | **NEXT** |
-| 6 — Semantic masks | 3.5 | 14.5 | pending |
+| 5 — RAW | 2.5 | 11 | **DONE (5a)** (2026-05-09) |
+| 6 — Semantic masks | 3.5 | 14.5 | **NEXT** |
 | 7 — Structure / composite | 1.5 | 16 | pending |
 | 8 — Multi-image | 1.5 | 17.5 | pending |
 | 9 — Polish | 2 | 19.5 | pending |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 4 = 8.5 days of plan.
+**Cumulative shipped:** Phase 0–4 + Phase 5a = ~10 days of plan (Phase 5b — `raw.develop` ops — deferred).
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -604,26 +608,29 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 5 — RAW support. Concrete work:
+Phase 6 — Semantic masks + local adjustments. Concrete work:
 
-1. Add `rawpy` (LibRaw wrapper) to runtime deps. Note any platform install prerequisites in the README.
-2. `src/autocam/io/raw.py` — `load_raw(path)` returns linear float32 via `rawpy.imread(...).postprocess(...)` with sensible defaults: AHD demosaic, camera-embedded WB, no auto-bright.
-3. Detect RAW vs raster by extension and dispatch in `executor.run_stack`'s loader path. Common extensions: `.arw`, `.nef`, `.cr2`, `.cr3`, `.dng`, `.raf`, `.orf`, `.rw2`.
-4. New ops in `src/autocam/ops/raw.py`:
-   - `raw.develop(wb, highlights, black)` — high-level develop knob.
-   - `raw.demosaic(algo)` — `Literal["ahd", "vng", "ppg", "linear"]`.
-   - `raw.camera_profile(file|name)` — record intent; full ICC handling deferred.
-5. Dual pipeline:
-   - **Preview path:** `postprocess(half_size=True, ...)` for a quick thumb at ≤2048px.
-   - **Export path:** `postprocess(output_bps=16, no_auto_bright=True, ...)` → 16-bit linear normalised to `[0, 1]`.
-6. EXIF preservation: read source EXIF via `exifread` (or similar) and re-embed on the JPEG/TIFF export.
-7. Tests with small fixture RAWs from 3+ camera makes (Sony ARW, Canon CR2, Nikon NEF). Bundle pre-trimmed tiny fixtures rather than depending on real camera files.
+1. Mask op infrastructure in `ops/masks.py`:
+   - Each mask op produces a `(H, W)` float32 mask in `[0, 1]` and registers itself in the same op registry as the rest of the surface.
+   - The executor needs a `mask` field on Op (already declared in the data model in §6 but unused so far). When set, the op composites its effect through the mask: `out = before * (1 - m) + after * m`.
+   - `Op.apply` stays the same; we wrap the dispatch in the executor.
+2. Six mask ops:
+   - `mask.luminosity(range="shadows"|"mids"|"highs"|custom, feather)`.
+   - `mask.color_range(hue, sat_range, lum_range, feather)`.
+   - `mask.semantic(description)` — FastSAM (small CPU-friendly model).
+   - `mask.background()` — rembg.
+   - `mask.face()` — MediaPipe face detection.
+   - `mask.invert(id)`.
+3. Lazy-download model weights on first use into `~/.cache/autocam/`. Print a one-line progress note to chat.
+4. Mask overlay toggle in TUI: `:mask show` / `:mask hide` to render the active mask as a magenta tint over the preview.
+5. Tool surface: extend `llm/tools.py` to emit each mask op. The system prompt gains a short section on chaining: "to warm only the skin, call `mask_face` then `color_white_balance` with `mask` set to that mask op's id."
+6. Performance target: masked preview regen < 500 ms on a 2048 px image. Bench in CI on a fixture.
 
-**DoD:** `create photo.arw` opens the RAW, the preview renders within ~1s, and natural-language edits flow through the same loop. `create apply --stack edits.json --in photo.arw --out out.jpg` produces a full-resolution export.
+**DoD:** With `ANTHROPIC_API_KEY` set and a portrait loaded, typing *"warm only the skin"* causes Claude to call `mask_face` then `color_white_balance` against that mask, and the preview shows just the skin warming.
 
-**Risks**
+**Risks:**
 
-- Per-camera quirks (Fuji X-Trans, Sigma Foveon) — scope: handle Bayer cleanly in v1; X-Trans may look soft.
-- Memory on 60MP RAWs during export — mitigation: tile via libvips when file size > 50 MB.
+- Model weight downloads on first run (~100–200 MB for FastSAM). Mitigate with a clear progress message and graceful fallback to colour-range masks if the download fails.
+- Segmentation flakiness on novel subjects. Mitigation: expose `mask_debug` to dump the raw mask for inspection; let the LLM retry with a different mask description.
 
-Phase 1–4 ops are reused as-is on the resulting linear array; Phase 5 is mostly the loader plus three new ops.
+Phase 1–5 ops still work; Phase 6 adds masking on top.

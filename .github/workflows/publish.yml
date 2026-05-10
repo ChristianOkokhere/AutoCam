@@ -1,0 +1,55 @@
+name: publish
+
+# Triggers on annotated version tags (v0.1.0, v0.1.1, ...). The workflow
+# builds the wheel + sdist and publishes them to PyPI via Trusted
+# Publishing (OIDC) — no PyPI API token is stored in repo secrets.
+#
+# One-time setup before this works:
+#   1. Claim the `autocam` name on https://pypi.org/manage/account/publishing/
+#   2. Add a "pending publisher" pointing to:
+#        Owner / repo: ChristianOkokhere / AutoCam
+#        Workflow:     publish.yml
+#        Environment:  pypi
+#   3. Create the `pypi` environment on the repo (Settings → Environments).
+#   4. Push a version tag: `git tag v0.1.0 && git push origin v0.1.0`.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Build wheel + sdist
+        run: uv build
+      - name: Smoke-check that wheel imports
+        run: |
+          uv venv .smokevenv
+          .smokevenv/bin/pip install dist/*.whl
+          .smokevenv/bin/python -c "import autocam; print(autocam.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

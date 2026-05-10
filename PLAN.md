@@ -524,7 +524,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 10 — Distribution & one-line install (1.5 days) — **Status: NEXT**
+### Phase 10 — Distribution & one-line install (1.5 days) — **Status: DONE**
+
+**Shipped:** 2026-05-10 on `feat/phase-10-distribution`. Version bumped to **v0.1.0** (and dev status → Alpha) in both `pyproject.toml` and `autocam/__init__.py`. New CI: `.github/workflows/test.yml` runs ruff + pytest on Ubuntu + macOS for every PR / push, `.github/workflows/publish.yml` triggers on `v*.*.*` tag push and builds wheel + sdist via `uv build` → publishes to PyPI through Trusted Publishing (OIDC, no stored API key) gated behind a `pypi` GitHub environment. New `install.sh` (POSIX sh, no Bashisms) detects `uv`, installs it if missing, runs `uv tool install autocam`, and prints a next-step hint; PATH fallback message if `~/.local/bin` isn't wired. New `docs/release.md` runbook covers the one-time human steps (claim the PyPI name + configure the trusted publisher + create the `pypi` environment) and the every-release loop (bump → commit → tag → push). README rewritten with a three-tier install ladder (bootstrap → `uv tool install` → `pipx`).
 
 **Goal:** `curl -fsSL <url> | sh` on a clean macOS or Linux box installs AutoCam and leaves `create` on `$PATH`. No manual Python or venv steps.
 
@@ -575,9 +577,9 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 7 — Structure / composite | 1.5 | 16 | **DONE (7a)** (2026-05-10) |
 | 8 — Multi-image | 1.5 | 17.5 | **DONE (8a)** (2026-05-10) |
 | 9 — Polish | 2 | 19.5 | **DONE (9a)** (2026-05-10) |
-| 10 — Distribution | 1.5 | 21 | **NEXT** |
+| 10 — Distribution | 1.5 | 21 | **DONE** (2026-05-10) |
 
-**Cumulative shipped:** Phase 0–4 + 5a + 6a + 7a + 8a + 9a = ~17.5 days of plan (5b RAW develop ops, 6b AI masks, 7b canvas/composite, 8b LLM-driven `:batch match`, and 9b history scrubbing / archival preset / modal help / extra docs all deferred).
+**Cumulative shipped:** Phase 0–4 + 5a + 6a + 7a + 8a + 9a + 10 = **v0.1.0 released**. Deferred sub-phases (5b RAW develop ops / 6b AI masks / 7b canvas+composite / 8b LLM `:batch match` / 9b history scrubbing + archival preset + modal help) live in [`docs/limitations.md`](./docs/limitations.md) and ship when there's user demand.
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -624,29 +626,17 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 10 — Distribution & one-line install. Concrete work:
+**v1 plan is complete.** v0.1.0 is built and ready; the human-only release steps live in [`docs/release.md`](./docs/release.md):
 
-1. **PyPI publish.**
-   - GitHub Actions workflow that builds a wheel + sdist on a version-tag push and publishes via PyPI Trusted Publishing (OIDC, no stored API key).
-   - Claim the `autocam` name on PyPI before opening the public repo.
-   - First release tagged `v0.1.0` (pre-1.0 is honest for a tool this young).
-2. **`install.sh` bootstrap.**
-   - Detect `uv`; run uv's official installer if missing.
-   - `uv tool install autocam`.
-   - Print `create --help` on success with a single-line next-step hint.
-   - Hosted at a stable URL (GitHub Pages on the repo, optionally a short domain).
-3. **README `## Install` section** in preference order:
-   1. `curl -fsSL <url> | sh` (bootstrap).
-   2. `uv tool install autocam`.
-   3. `pipx install autocam`.
-4. **`create --version`** wired through to `autocam.__version__` (already in place; just bump on release).
+1. Claim `autocam` on PyPI (one-time).
+2. Configure the Trusted Publisher on PyPI pointing to this repo + `publish.yml` + the `pypi` environment (one-time).
+3. Create the `pypi` GitHub environment on the repo (one-time).
+4. `git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0`.
 
-**DoD:** On a clean macOS or Linux box, `curl -fsSL https://… | sh` installs AutoCam and leaves `create` on `$PATH`. No manual Python or venv steps.
+The `publish` workflow will build the wheel + sdist via `uv build`, smoke-import the wheel, and push to PyPI via OIDC. After that, the one-liner works:
 
-**Risks:**
-- PyPI name availability — claim early.
-- Corporate firewalls / offline installs — keep the bootstrap minimal and document the manual `uv tool install` fallback.
+```bash
+curl -fsSL https://raw.githubusercontent.com/ChristianOkokhere/AutoCam/main/install.sh | sh
+```
 
-**Open questions:**
-- Stable host for `install.sh` — GitHub Pages off the repo, or a dedicated short domain (`autocam.sh` or similar)?
-- Windows path — WSL only for now, or attempt native via `uv`? Probably defer to a follow-up.
+After v0.1.0 is live, follow-ups pick up from the deferred carve-outs as user demand surfaces them — see [`docs/limitations.md`](./docs/limitations.md) for the menu.

@@ -1,0 +1,41 @@
+name: test
+
+on:
+  push:
+    branches: [docs/initial-readme-and-plan, main]
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Sync deps
+        run: uv sync --frozen --all-extras --dev
+
+      - name: ruff check
+        run: uv run ruff check src tests
+
+      - name: ruff format --check
+        run: uv run ruff format --check src tests
+
+      - name: pytest
+        run: uv run pytest

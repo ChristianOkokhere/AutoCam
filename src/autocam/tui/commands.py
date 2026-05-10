@@ -82,6 +82,19 @@ class MaskHideCommand:
     """``:mask hide`` — clear any active mask overlay."""
 
 
+@dataclass
+class BatchApplyCommand:
+    """``:batch apply <stack> <glob> [<out_template>]``.
+
+    Applies a saved edit stack to every file matching ``glob`` and writes
+    each through ``out_template`` (default: ``{stem}_autocam.jpg``).
+    """
+
+    stack_path: Path
+    glob: str
+    out_template: str = ""
+
+
 Command = (
     AddCommand
     | UndoCommand
@@ -92,6 +105,7 @@ Command = (
     | CritiqueCommand
     | MaskShowCommand
     | MaskHideCommand
+    | BatchApplyCommand
 )
 
 
@@ -153,6 +167,13 @@ def parse_command(line: str) -> Command:
         if sub == "hide":
             return MaskHideCommand()
         raise CommandError(f":mask {sub!r} — expected `show` or `hide`")
+    if verb == "batch":
+        if len(rest) < 3 or rest[0] != "apply":
+            raise CommandError(":batch apply <stack.json> <glob> [<out_template>]")
+        stack_path = Path(rest[1]).expanduser()
+        glob = rest[2]
+        out_template = rest[3] if len(rest) > 3 else ""
+        return BatchApplyCommand(stack_path=stack_path, glob=glob, out_template=out_template)
     raise CommandError(f"unknown command: :{verb}")
 
 

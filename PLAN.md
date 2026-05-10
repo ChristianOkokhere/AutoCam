@@ -483,7 +483,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 8 — Multi-image / batch (1–2 days) — **Status: NEXT**
+### Phase 8 — Multi-image / batch (1–2 days) — **Status: DONE (8a)**
+
+**Shipped (8a):** 2026-05-10 on `feat/phase-8a-batch-cli-and-tui`. New `pipeline/batch.py` with `run_one` / `run_many` (sequential when `workers <= 1`, `ProcessPoolExecutor` otherwise) and a filename-template resolver supporting `{name}` / `{stem}` / `{ext}` / `{idx}` / `{idx0}` / `{stack_id}` (8-char SHA-256 of the stack JSON). Failures collect into per-image `BatchResult`s without aborting. CLI: `create batch --stack edits.json --in 'shoot/*.arw' --out 'export/{stem}.jpg' --workers 4` glob-expands inputs, prints one progress line per finished image, and exits non-zero if any fail. TUI: `:batch apply <stack> <glob> [<template>]` runs the same flow in a Textual worker; events stream into the chat pane. 14 new tests, 146 total green.
+
+**8b carved out:** `:batch match <ref-stack> <glob>` (LLM-driven look-matching, one Claude call per image with the reference image bundled in) defers — it's a cost-aware feature that wants its own UX (cap, warn, dry-run) and its own review.
 
 **Goal:** "Apply this look to the other 49 photos."
 
@@ -497,7 +501,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 9 — Polish & docs (2 days)
+### Phase 9 — Polish & docs (2 days) — **Status: NEXT**
 
 **Goal:** First-run friendly.
 
@@ -565,11 +569,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 5 — RAW | 2.5 | 11 | **DONE (5a)** (2026-05-09) |
 | 6 — Semantic masks | 3.5 | 14.5 | **DONE (6a)** (2026-05-10) |
 | 7 — Structure / composite | 1.5 | 16 | **DONE (7a)** (2026-05-10) |
-| 8 — Multi-image | 1.5 | 17.5 | **NEXT** |
-| 9 — Polish | 2 | 19.5 | pending |
+| 8 — Multi-image | 1.5 | 17.5 | **DONE (8a)** (2026-05-10) |
+| 9 — Polish | 2 | 19.5 | **NEXT** |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0–4 + Phase 5a + Phase 6a + Phase 7a = ~14 days of plan (5b RAW develop ops, 6b AI masks, and 7b canvas/composite layer model deferred).
+**Cumulative shipped:** Phase 0–4 + Phase 5a + Phase 6a + Phase 7a + Phase 8a = ~15.5 days of plan (5b RAW develop ops, 6b AI masks, 7b canvas/composite, and 8b LLM-driven `:batch match` deferred).
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -616,19 +620,19 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 8 — Multi-image / batch. Concrete work:
+Phase 9 — Polish & docs. Concrete work:
 
-1. `create batch` CLI subcommand:
-   - Args: `--stack edits.json`, `--in '*.jpg'` (glob, comma-or-space separated paths), `--out <dir-or-template>`.
-   - Filename templating in `--out`: tokens `{name}`, `{stem}`, `{ext}`, `{stack_id}`, `{idx}`. Default template: `{stem}_autocam.jpg`.
-   - Optional `--workers N` (default = CPU count, capped to 8).
-2. Worker pool via `concurrent.futures.ProcessPoolExecutor` — each worker loads its own model state (`load_any` + `run_stack`), so the GIL is a non-issue.
-3. Progress output: print one line per finished image (`[3/49] photo_0003.jpg → photo_0003_autocam.jpg  (1.2s)`). Errors don't abort; collect and print a summary at the end.
-4. TUI integration:
-   - New chat command `:batch apply <stack.json> <glob>` mirrors the CLI, runs in the existing worker model, streams results into the chat pane.
-   - `:batch match <ref-stack> <glob>` runs the LLM in a "match these to the reference" mode (single-shot per image) — one Claude call per image, with the reference image and one of the targets bundled into the user message. Cost-aware: cap at the first 10 images and warn before exceeding.
-5. Stack reusability: `EditStack.source` becomes optional for batch use — runtime patches it before each call. Document the new convention.
+1. **Undo / redo bindings on the App level** — already wired (`Ctrl+Z` / `Ctrl+Y`); audit edge cases: undo a mask op should also drop downstream ops that referenced it (or warn loudly), redo should never resurrect a stale mask reference.
+2. **History scrubbing** — click / arrow-key on the history pane to peek at any prefix of the stack; preview reflects that point. Esc returns to the live tip.
+3. **Export presets** — `:export web | print | archival` writes the current stack to disk via the existing pipeline with hard-coded sensible defaults (web = sRGB JPEG q88 long-edge 2048; print = sRGB JPEG q95 full-res; archival = sRGB TIFF 16-bit full-res). Backed by a tiny `presets.py`; LLM can call `export_save` itself if it wants finer control.
+4. **Keybindings + help overlay** — `?` opens a modal listing all chat commands and bindings.
+5. **Error surfaces** — pipeline failures during a chat turn should land in chat with a one-line summary, not crash the worker.
+6. **Docs**:
+   - `docs/install.md` — terminal setup, `ANTHROPIC_API_KEY`, supported terminals.
+   - `docs/recipes.md` — how to write your own.
+   - `docs/tools.md` — auto-generated from the JSONSchema tool surface.
+   - `docs/limitations.md` — the deferred carve-outs (5b/6b/7b/8b) and other known gaps.
 
-**DoD:** `create batch --stack edits.json --in 'shoot/*.arw' --out 'export/{stem}.jpg'` processes a folder of RAWs in parallel and writes JPEGs without crashing on any of them; progress lines appear as each image finishes.
+**DoD:** A first-time user, given just the README, can install, point at a photo, and edit it via natural language without hitting an unhandled error.
 
-Phase 1–7 ops keep working unchanged. Phase 8 is purely a multi-source orchestrator — no new pixel-level code.
+Phase 9 is the last UX-shaping pass before Phase 10 (distribution).

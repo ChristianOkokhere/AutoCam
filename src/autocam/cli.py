@@ -1,8 +1,9 @@
 """AutoCam CLI.
 
-* ``create``                      → launches the TUI (no image loaded)
-* ``create path/to/photo.jpg``   → launches the TUI with that photo loaded
-* ``create apply --stack ...``   → one-shot batch mode (Phase 1)
+* ``create``                          → launches the TUI (no image loaded)
+* ``create path/to/photo.jpg``       → launches the TUI with that photo loaded
+* ``create apply --stack ...``       → one-shot single-image batch mode
+* ``create batch --stack ... --in '*.arw' --out '{stem}.jpg'`` → multi-image batch
 """
 
 from __future__ import annotations
@@ -13,10 +14,17 @@ from pathlib import Path
 
 from autocam import BANNER
 from autocam.io.image import save_image
+from autocam.pipeline.batch import (
+    DEFAULT_TEMPLATE,
+    BatchResult,
+    auto_workers,
+    expand_inputs,
+    run_many,
+)
 from autocam.pipeline.executor import run_stack
 from autocam.pipeline.stack import EditStack
 
-_SUBCOMMANDS = {"apply"}
+_SUBCOMMANDS = {"apply", "batch"}
 
 
 def _apply(args: argparse.Namespace) -> int:
@@ -32,6 +40,47 @@ def _apply(args: argparse.Namespace) -> int:
 
     save_image(img, args.out, format=fmt, quality=args.quality)
     print(f"wrote {args.out}")
+    return 0
+
+
+def _format_batch_line(r: BatchResult) -> str:
+    pad = max(2, len(str(r.total)))
+    counter = f"[{str(r.idx).zfill(pad)}/{r.total}]"
+    if r.ok and r.output is not None:
+        return f"{counter} {r.source.name} -> {r.output.name}  ({r.seconds:.1f}s)"
+    return f"{counter} {r.source.name} FAILED: {r.error}"
+
+
+def _batch(args: argparse.Namespace) -> int:
+    sources = expand_inputs(args.inputs)
+    if not sources:
+        print("error: no input files matched", file=sys.stderr)
+        return 2
+    workers = args.workers if args.workers > 0 else auto_workers()
+    fmt = args.format if args.format != "jpg" else "jpeg"
+
+    def on_event(r: BatchResult) -> None:
+        line = _format_batch_line(r)
+        stream = sys.stdout if r.ok else sys.stderr
+        print(line, file=stream, flush=True)
+
+    results = run_many(
+        stack_path=args.stack,
+        sources=sources,
+        out_template=args.out,
+        workers=workers,
+        image_format=fmt,
+        quality=args.quality,
+        on_event=on_event,
+    )
+
+    failures = [r for r in results if not r.ok]
+    print(f"\n{len(results) - len(failures)}/{len(results)} succeeded.", flush=True)
+    if failures:
+        print(f"{len(failures)} failed:", file=sys.stderr)
+        for r in failures:
+            print(f"  {r.source.name}: {r.error}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -73,6 +122,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="Downscale to preview size before applying ops.",
     )
     apply_p.set_defaults(func=_apply)
+
+    batch_p = sub.add_parser(
+        "batch",
+        help="Apply an edit stack to a glob of images, in parallel.",
+    )
+    batch_p.add_argument("--stack", type=Path, required=True, help="Path to edit stack JSON.")
+    batch_p.add_argument(
+        "--in",
+        dest="inputs",
+        nargs="+",
+        required=True,
+        help="One or more paths or glob patterns (e.g. 'shoot/*.arw').",
+    )
+    batch_p.add_argument(
+        "--out",
+        type=str,
+        default=DEFAULT_TEMPLATE,
+        help=(
+            "Output path or template. Tokens: {name} {stem} {ext} {idx} {idx0} "
+            "{stack_id}. A bare directory implies the default template. "
+            f"Default: {DEFAULT_TEMPLATE!r}."
+        ),
+    )
+    batch_p.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Parallel processes. 0 = auto (CPU count, capped at 8).",
+    )
+    batch_p.add_argument("--format", type=str, default="jpeg", help="jpeg / png / tiff")
+    batch_p.add_argument("--quality", type=int, default=90)
+    batch_p.set_defaults(func=_batch)
 
     return parser
 

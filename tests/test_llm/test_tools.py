@@ -80,3 +80,25 @@ def test_all_tool_names_are_anthropic_legal() -> None:
     for spec in all_tool_specs():
         assert TOOL_NAME_RE.match(spec["name"]), spec["name"]
         assert len(spec["description"]) <= 1024
+
+
+def test_adjustment_op_exposes_mask_param() -> None:
+    spec = op_tool_spec(ExposureOp)
+    props = spec["input_schema"]["properties"]
+    assert "mask" in props
+    assert props["mask"]["type"] == "string"
+    assert props["mask"]["default"] is None
+    assert "mask" in props["mask"]["description"].lower()
+
+
+def test_mask_op_hides_its_own_mask_param() -> None:
+    from autocam.ops.masks import LuminosityMaskOp
+
+    spec = op_tool_spec(LuminosityMaskOp)
+    props = spec["input_schema"]["properties"]
+    assert "mask" not in props
+
+
+def test_mask_op_tool_surface_includes_three_masks() -> None:
+    names = {s["name"] for s in all_tool_specs()}
+    assert {"mask_luminosity", "mask_color_range", "mask_invert"} <= names

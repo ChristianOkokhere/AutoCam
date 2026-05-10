@@ -9,7 +9,7 @@ import numpy.typing as npt
 from PIL import Image
 
 from autocam.io import load_any
-from autocam.ops import Op, PipelineCtx
+from autocam.ops import MaskOp, Op, PipelineCtx
 from autocam.pipeline.color import linear_to_srgb, srgb_to_linear
 from autocam.pipeline.stack import EditStack
 
@@ -41,6 +41,21 @@ def run_stack(
     preview: bool = False,
 ) -> Float32Array:
     """Execute a stack and return the final linear-sRGB float32 image."""
+    img, _ = run_stack_with_ctx(stack, source=source, preview=preview)
+    return img
+
+
+def run_stack_with_ctx(
+    stack: EditStack,
+    source: Path | str | None = None,
+    *,
+    preview: bool = False,
+) -> tuple[Float32Array, PipelineCtx]:
+    """Execute a stack and return the buffer plus the populated PipelineCtx.
+
+    The TUI uses this when it wants the masks computed during the run
+    (e.g. for the ``:mask show`` overlay).
+    """
     source_path = Path(source) if source is not None else Path(stack.source)
     img = load_any(source_path, preview=preview)
     if preview:
@@ -48,8 +63,26 @@ def run_stack(
 
     ctx = PipelineCtx(source_path=str(source_path), preview=preview)
     for op in stack.ops:
-        img = op.apply(img, ctx)
-    return img
+        img = _apply_op(op, img, ctx)
+    return img, ctx
+
+
+def _apply_op(op: Op, img: Float32Array, ctx: PipelineCtx) -> Float32Array:
+    """Apply ``op`` against ``img``, compositing through ``op.mask`` if set."""
+    if isinstance(op, MaskOp) or op.mask is None:
+        return op.apply(img, ctx)
+
+    if op.mask not in ctx.masks:
+        raise KeyError(
+            f"op {op.name}({op.id}) references mask {op.mask!r} which has not "
+            "been computed yet — emit the mask op earlier in the stack"
+        )
+    mask = ctx.masks[op.mask]
+    if mask.shape != img.shape[:2]:
+        raise ValueError(f"mask shape {mask.shape} doesn't match image {img.shape[:2]}")
+    after = op.apply(img, ctx)
+    blend = mask[..., None].astype(np.float32)
+    return (img * (1.0 - blend) + after * blend).astype(np.float32)
 
 
 class Pipeline:

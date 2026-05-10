@@ -172,11 +172,22 @@ def _tool_error(tool_use_id: str, msg: str) -> dict[str, Any]:
     }
 
 
-def _tool_ok(tool_use_id: str, summary: dict[str, list[float]]) -> dict[str, Any]:
+def _tool_ok(
+    tool_use_id: str,
+    summary: dict[str, list[float]],
+    *,
+    op_id: str = "",
+    op_name: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"ok": True, "summary": summary}
+    if op_id:
+        payload["op_id"] = op_id
+    if op_name:
+        payload["op_name"] = op_name
     return {
         "type": "tool_result",
         "tool_use_id": tool_use_id,
-        "content": json.dumps({"ok": True, "summary": summary}),
+        "content": json.dumps(payload),
     }
 
 
@@ -263,13 +274,13 @@ def run_turn(
             try:
                 arr = refresh_preview(stack)
                 summary = histogram_summary(arr)
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, KeyError) as exc:
                 stack.pop()
                 emit(ErrorEvent(message=f"{op_name} failed: {exc}"))
                 tool_results.append(_tool_error(block.id, f"pipeline error: {exc}"))
                 continue
 
-            tool_results.append(_tool_ok(block.id, summary))
+            tool_results.append(_tool_ok(block.id, summary, op_id=op.id, op_name=op_name))
 
         messages.append({"role": "user", "content": tool_results})
 

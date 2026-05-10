@@ -66,6 +66,22 @@ class CritiqueCommand:
     text: str = ""
 
 
+@dataclass
+class MaskShowCommand:
+    """``:mask show [target]`` — overlay a mask on the preview.
+
+    ``target`` is either a mask op id (full or prefix), the literal ``last``
+    for the most recently appended mask op, or empty (treated as ``last``).
+    """
+
+    target: str = ""
+
+
+@dataclass
+class MaskHideCommand:
+    """``:mask hide`` — clear any active mask overlay."""
+
+
 Command = (
     AddCommand
     | UndoCommand
@@ -74,6 +90,8 @@ Command = (
     | QuitCommand
     | ChatMessage
     | CritiqueCommand
+    | MaskShowCommand
+    | MaskHideCommand
 )
 
 
@@ -125,6 +143,16 @@ def parse_command(line: str) -> Command:
         return OpenCommand(path=Path(rest[0]).expanduser())
     if verb == "quit":
         return QuitCommand()
+    if verb == "mask":
+        if not rest:
+            raise CommandError(":mask needs `show [target]` or `hide`")
+        sub = rest[0]
+        if sub == "show":
+            target = rest[1] if len(rest) > 1 else ""
+            return MaskShowCommand(target=target)
+        if sub == "hide":
+            return MaskHideCommand()
+        raise CommandError(f":mask {sub!r} — expected `show` or `hide`")
     raise CommandError(f"unknown command: :{verb}")
 
 

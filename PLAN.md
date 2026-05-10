@@ -434,7 +434,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 6 — Semantic masks + local adjustments (3–4 days) — **Status: NEXT**
+### Phase 6 — Semantic masks + local adjustments (3–4 days) — **Status: DONE (6a)**
+
+**Shipped (6a):** 2026-05-10 on `feat/phase-6a-mask-infra-and-cheap-masks`. Architectural change to the op model: `Op.mask: str | None` references a previously-emitted `MaskOp` whose mask the executor composites through (`before * (1 - m) + after * m`). `PipelineCtx.masks` stores `(H, W)` float32 masks keyed by op id. Three deterministic mask ops in `ops/masks.py`: `mask.luminosity(range, feather)`, `mask.color_range(hue_deg, hue_width_deg, sat_min, lum_min, lum_max, feather)`, `mask.invert(target)`. Tool surface auto-extends — every adjustment op picks up a `mask` schema param, MaskOp subclasses hide it. Tool results now carry `op_id`/`op_name` so Claude can chain a mask call with a follow-up adjustment that references it. TUI `:mask show [target]` / `:mask hide` paints a magenta overlay (target accepts full id, prefix, or `last`/empty). System prompt gains a "Local edits (masks)" section with three worked examples. JSON stack round-trip handles the new `mask` field; legacy stacks without it still load. **17 new tests, 119 total green.**
+
+**6b carved out:** AI-driven mask ops (`mask.semantic` / `mask.background` / `mask.face`) defer to a follow-up because their deps (FastSAM ~200MB + PyTorch, rembg + ONNX, MediaPipe) are heavyweight and conflict with the easy-install Phase 10 goal. The architecture in 6a accepts them as drop-in `MaskOp` subclasses.
 
 **Goal:** "Darken the sky, warm only the skin." Just works.
 
@@ -462,7 +466,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 7 — Structure / compositing (1–2 days)
+### Phase 7 — Structure / compositing (1–2 days) — **Status: NEXT**
 
 **Goal:** "Scale to 95% and add a 2% white border with a 1px hairline."
 
@@ -555,13 +559,13 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 3 — LLM loop | 2 | 7 | **DONE** (2026-05-09) |
 | 4 — Recipes + prompt | 1.5 | 8.5 | **DONE** (2026-05-09) |
 | 5 — RAW | 2.5 | 11 | **DONE (5a)** (2026-05-09) |
-| 6 — Semantic masks | 3.5 | 14.5 | **NEXT** |
-| 7 — Structure / composite | 1.5 | 16 | pending |
+| 6 — Semantic masks | 3.5 | 14.5 | **DONE (6a)** (2026-05-10) |
+| 7 — Structure / composite | 1.5 | 16 | **NEXT** |
 | 8 — Multi-image | 1.5 | 17.5 | pending |
 | 9 — Polish | 2 | 19.5 | pending |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0–4 + Phase 5a = ~10 days of plan (Phase 5b — `raw.develop` ops — deferred).
+**Cumulative shipped:** Phase 0–4 + Phase 5a + Phase 6a = ~12.5 days of plan (Phase 5b RAW develop ops + Phase 6b AI masks deferred).
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -608,29 +612,22 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 6 — Semantic masks + local adjustments. Concrete work:
+Phase 7 — Structure / compositing. Concrete work:
 
-1. Mask op infrastructure in `ops/masks.py`:
-   - Each mask op produces a `(H, W)` float32 mask in `[0, 1]` and registers itself in the same op registry as the rest of the surface.
-   - The executor needs a `mask` field on Op (already declared in the data model in §6 but unused so far). When set, the op composites its effect through the mask: `out = before * (1 - m) + after * m`.
-   - `Op.apply` stays the same; we wrap the dispatch in the executor.
-2. Six mask ops:
-   - `mask.luminosity(range="shadows"|"mids"|"highs"|custom, feather)`.
-   - `mask.color_range(hue, sat_range, lum_range, feather)`.
-   - `mask.semantic(description)` — FastSAM (small CPU-friendly model).
-   - `mask.background()` — rembg.
-   - `mask.face()` — MediaPipe face detection.
-   - `mask.invert(id)`.
-3. Lazy-download model weights on first use into `~/.cache/autocam/`. Print a one-line progress note to chat.
-4. Mask overlay toggle in TUI: `:mask show` / `:mask hide` to render the active mask as a magenta tint over the preview.
-5. Tool surface: extend `llm/tools.py` to emit each mask op. The system prompt gains a short section on chaining: "to warm only the skin, call `mask_face` then `color_white_balance` with `mask` set to that mask op's id."
-6. Performance target: masked preview regen < 500 ms on a 2048 px image. Bench in CI on a fixture.
+1. New ops in `src/autocam/ops/structure.py`:
+   - `struct.canvas(w, h, bg)` — set a backing canvas.
+   - `struct.resize(scale | width | height)` — proportional or absolute.
+   - `struct.pad(top, right, bottom, left, color)` — uniform or per-side.
+   - `struct.border(width_pct, color)` — outer border as a percentage of the short edge.
+   - `struct.composite(layer, blend, opacity)` — drop another stack's render on top.
+   - `struct.text(content, font, size, pos, color)` — typeset text.
+   - `struct.watermark(file, pos, opacity)` — drop a watermark image.
+2. Layer model: `struct.composite` takes a `layer` ref that's an `EditStack` rendered into a transparent buffer. Layers serialize as nested stacks inside the JSON.
+3. Fonts: ship a default sans + serif (Inter or DejaVu) in `src/autocam/knowledge/fonts/`; allow user-installed fonts by absolute path.
+4. Colour parsing: accept hex (`#rrggbb` / `#rrggbbaa`) and named colours.
+5. Tool surface: existing auto-generation handles these; the system prompt grows one short section on layout intent ("scale before adding a border, otherwise you re-scale the border too").
+6. Tests: each op against a fixture, plus a multi-op stack that resizes + borders + writes "© 2026" and asserts dimensions / corner-pixel colour.
 
-**DoD:** With `ANTHROPIC_API_KEY` set and a portrait loaded, typing *"warm only the skin"* causes Claude to call `mask_face` then `color_white_balance` against that mask, and the preview shows just the skin warming.
+**DoD:** Typing *"scale to 95% and add a 2% white border with a thin grey hairline"* causes Claude to call `struct.resize` + `struct.border` (or two borders) and the preview shows the framed photo.
 
-**Risks:**
-
-- Model weight downloads on first run (~100–200 MB for FastSAM). Mitigate with a clear progress message and graceful fallback to colour-range masks if the download fails.
-- Segmentation flakiness on novel subjects. Mitigation: expose `mask_debug` to dump the raw mask for inspection; let the LLM retry with a different mask description.
-
-Phase 1–5 ops still work; Phase 6 adds masking on top.
+Phases 1–6 ops keep working — Phase 7 lives downstream of them in the stack.

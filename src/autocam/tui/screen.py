@@ -33,14 +33,17 @@ from autocam.llm.loop import (
     ToolEvent,
     run_turn,
 )
+from autocam.ops import MaskOp
 from autocam.pipeline.color import linear_to_srgb
-from autocam.pipeline.executor import run_stack
+from autocam.pipeline.executor import run_stack, run_stack_with_ctx
 from autocam.pipeline.stack import EditStack, source_hash
 from autocam.tui.commands import (
     AddCommand,
     ChatMessage,
     CommandError,
     CritiqueCommand,
+    MaskHideCommand,
+    MaskShowCommand,
     OpenCommand,
     QuitCommand,
     RedoCommand,
@@ -89,6 +92,7 @@ class AutoCamApp(App[None]):
         self.stack: EditStack = EditStack(source="")
         self._undo: list[Op] = []
         self._llm_busy: bool = False
+        self._mask_overlay: str | None = None
         self._pending_source: Path | None = (
             Path(image_path).expanduser().resolve() if image_path else None
         )
@@ -133,6 +137,12 @@ class AutoCamApp(App[None]):
             return
         if isinstance(cmd, CritiqueCommand):
             self._handle_critique(cmd)
+            return
+        if isinstance(cmd, MaskShowCommand):
+            self._handle_mask_show(cmd)
+            return
+        if isinstance(cmd, MaskHideCommand):
+            self._handle_mask_hide()
             return
         if isinstance(cmd, OpenCommand):
             self._handle_open(cmd.path)
@@ -312,17 +322,67 @@ class AutoCamApp(App[None]):
             return
         preview = self.query_one(PreviewPane)
         try:
-            arr = run_stack(self.stack, preview=True)
-        except (OSError, ValueError) as exc:
+            arr, ctx = run_stack_with_ctx(self.stack, preview=True)
+        except (OSError, ValueError, KeyError) as exc:
             self.query_one(ChatPane).write(f"preview failed: {exc}", role="error")
             return
+
         display = linear_to_srgb(arr)
+        if self._mask_overlay and self._mask_overlay in ctx.masks:
+            display = _composite_mask_overlay(display, ctx.masks[self._mask_overlay])
+
         arr8 = np.clip(display * 255.0, 0, 255).astype(np.uint8)
         pil = PILImage.fromarray(arr8)
+        suffix = f"  · mask:{self._mask_overlay[:6]}" if self._mask_overlay else ""
         preview.show_image(
             pil,
-            status=f"{Path(self.stack.source).name}  {pil.width}x{pil.height}",
+            status=f"{Path(self.stack.source).name}  {pil.width}x{pil.height}{suffix}",
         )
+
+    # ── mask overlay ──────────────────────────────────────────────────
+
+    def _handle_mask_show(self, cmd: MaskShowCommand) -> None:
+        chat = self.query_one(ChatPane)
+        if not self.stack.source:
+            chat.write("no image loaded — `:open <path>` first", role="error")
+            return
+        target_id = self._resolve_mask_target(cmd.target)
+        if target_id is None:
+            chat.write(f":mask show: no mask matches {cmd.target!r}", role="error")
+            return
+        self._mask_overlay = target_id
+        chat.write(f"mask overlay → {target_id[:6]}…")
+        self._refresh_preview()
+
+    def _handle_mask_hide(self) -> None:
+        chat = self.query_one(ChatPane)
+        if self._mask_overlay is None:
+            chat.write("no mask overlay active", role="error")
+            return
+        self._mask_overlay = None
+        chat.write("mask overlay cleared")
+        self._refresh_preview()
+
+    def _resolve_mask_target(self, target: str) -> str | None:
+        """Find a mask op id by full id, prefix, or `last`/empty."""
+        mask_ops = [op for op in self.stack.ops if isinstance(op, MaskOp)]
+        if not mask_ops:
+            return None
+        if target in {"", "last"}:
+            return mask_ops[-1].id
+        for op in mask_ops:
+            if op.id == target or op.id.startswith(target):
+                return op.id
+        return None
+
+
+def _composite_mask_overlay(display: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Tint the preview magenta where ``mask`` is non-zero."""
+    if mask.shape != display.shape[:2]:
+        return display
+    alpha = (mask * 0.5).clip(0.0, 0.5).astype(np.float32)[..., None]
+    magenta = np.array([1.0, 0.15, 0.85], dtype=np.float32)
+    return (display * (1.0 - alpha) + magenta * alpha).astype(np.float32)
 
 
 def run(image_path: Path | None = None) -> None:

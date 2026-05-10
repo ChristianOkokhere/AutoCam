@@ -63,3 +63,35 @@ def test_source_hash_deterministic(tmp_path: Path) -> None:
     h2 = source_hash(p)
     assert h1 == h2
     assert h1.startswith("sha256:")
+
+
+def test_stack_round_trip_with_mask_field() -> None:
+    """Phase 6a: an op carrying a `mask` reference must round-trip via JSON."""
+    from autocam.ops.masks import LuminosityMaskOp
+
+    s = EditStack(source="foo.jpg")
+    mask_op = LuminosityMaskOp(range="highs", feather=0.0)
+    s.append(mask_op)
+    s.append(ExposureOp(ev=-0.5, mask=mask_op.id))
+
+    text = s.to_json()
+    data = json.loads(text)
+    assert data["ops"][0]["op"] == "mask.luminosity"
+    assert "mask" not in data["ops"][0]  # mask op has no mask field in JSON
+    assert data["ops"][1]["op"] == "tone.exposure"
+    assert data["ops"][1]["mask"] == mask_op.id
+
+    s2 = EditStack.from_json(text)
+    assert s2.ops[1].mask == mask_op.id
+
+
+def test_legacy_stack_without_mask_field_round_trips() -> None:
+    """Stacks written before Phase 6a have no `mask` key — must still load."""
+    legacy = {
+        "version": 1,
+        "source": "foo.jpg",
+        "ops": [{"id": "abc", "op": "tone.exposure", "params": {"ev": 0.5}}],
+    }
+    s = EditStack.from_dict(legacy)
+    assert s.ops[0].mask is None
+    assert s.ops[0].ev == 0.5

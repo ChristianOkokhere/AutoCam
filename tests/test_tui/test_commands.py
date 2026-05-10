@@ -55,6 +55,39 @@ def test_parse_critique_without_text() -> None:
     assert cmd.text == ""
 
 
+def test_parse_mask_show_with_target() -> None:
+    from autocam.tui.commands import MaskShowCommand
+
+    cmd = parse_command(":mask show abc123")
+    assert isinstance(cmd, MaskShowCommand)
+    assert cmd.target == "abc123"
+
+
+def test_parse_mask_show_without_target() -> None:
+    from autocam.tui.commands import MaskShowCommand
+
+    cmd = parse_command(":mask show")
+    assert isinstance(cmd, MaskShowCommand)
+    assert cmd.target == ""
+
+
+def test_parse_mask_hide() -> None:
+    from autocam.tui.commands import MaskHideCommand
+
+    cmd = parse_command(":mask hide")
+    assert isinstance(cmd, MaskHideCommand)
+
+
+def test_parse_mask_unknown_subcommand_errors() -> None:
+    with pytest.raises(CommandError, match="show"):
+        parse_command(":mask blarp")
+
+
+def test_parse_mask_no_subcommand_errors() -> None:
+    with pytest.raises(CommandError, match="show"):
+        parse_command(":mask")
+
+
 def test_parse_add_with_params() -> None:
     cmd = parse_command(":add tone.exposure ev=0.5")
     assert isinstance(cmd, AddCommand)

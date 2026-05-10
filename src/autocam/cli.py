@@ -22,9 +22,14 @@ from autocam.pipeline.batch import (
     run_many,
 )
 from autocam.pipeline.executor import run_stack
+from autocam.pipeline.presets import (
+    PRESETS,
+    default_export_path,
+    export_with_preset,
+)
 from autocam.pipeline.stack import EditStack
 
-_SUBCOMMANDS = {"apply", "batch"}
+_SUBCOMMANDS = {"apply", "batch", "export"}
 
 
 def _apply(args: argparse.Namespace) -> int:
@@ -155,7 +160,41 @@ def build_parser() -> argparse.ArgumentParser:
     batch_p.add_argument("--quality", type=int, default=90)
     batch_p.set_defaults(func=_batch)
 
+    export_p = sub.add_parser(
+        "export",
+        help="Apply a stack and save through a preset (web / print).",
+    )
+    export_p.add_argument(
+        "preset",
+        choices=sorted(PRESETS),
+        help="One of: " + ", ".join(sorted(PRESETS)),
+    )
+    export_p.add_argument("--stack", type=Path, required=True, help="Path to edit stack JSON.")
+    export_p.add_argument(
+        "--in",
+        dest="input",
+        type=Path,
+        default=None,
+        help="Source image path (overrides stack.source).",
+    )
+    export_p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output path. Default: <source>_<preset>.jpg next to the source.",
+    )
+    export_p.set_defaults(func=_export)
+
     return parser
+
+
+def _export(args: argparse.Namespace) -> int:
+    stack = EditStack.load(args.stack)
+    source = args.input if args.input is not None else Path(stack.source)
+    out = args.out if args.out is not None else default_export_path(source, args.preset)
+    final = export_with_preset(stack=stack, source=source, preset=args.preset, out_path=out)
+    print(f"wrote {final}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

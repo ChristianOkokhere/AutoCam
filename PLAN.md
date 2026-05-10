@@ -501,7 +501,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 9 — Polish & docs (2 days) — **Status: NEXT**
+### Phase 9 — Polish & docs (2 days) — **Status: DONE (9a)**
+
+**Shipped (9a):** 2026-05-10 on `feat/phase-9a-export-presets-help-docs`. Two export presets in `pipeline/presets.py` — `web` (sRGB JPEG q88, long-edge clamped to 2048 px) and `print` (q95, full-res). Surface points: `:export <preset> [<out_path>]` chat command (runs in a Textual worker; default path is `<source>_<preset>.jpg`) and `create export web|print --stack ... --in ... --out ...` CLI. New `:help` chat command and `Ctrl+?` binding dump the full command reference into the chat log. New `docs/install.md` (terminal support, `ANTHROPIC_API_KEY`, install path, troubleshooting) and `docs/limitations.md` (deferred carve-outs + known gaps so a first-time user knows what they're getting). 12 new tests, 158 total green.
+
+**9b carved out:** history scrubbing (needs Textual focus + selection UI), 16-bit TIFF archival preset (`tifffile` route to bypass Pillow's flaky 16-bit RGB TIFF), modal `?` overlay, auto-generated `docs/tools.md`, `docs/recipes.md`, `.env` autoload, dehaze / clarity / NR ops.
 
 **Goal:** First-run friendly.
 
@@ -520,7 +524,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 10 — Distribution & one-line install (1.5 days) — **Status: PENDING**
+### Phase 10 — Distribution & one-line install (1.5 days) — **Status: NEXT**
 
 **Goal:** `curl -fsSL <url> | sh` on a clean macOS or Linux box installs AutoCam and leaves `create` on `$PATH`. No manual Python or venv steps.
 
@@ -570,10 +574,10 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 6 — Semantic masks | 3.5 | 14.5 | **DONE (6a)** (2026-05-10) |
 | 7 — Structure / composite | 1.5 | 16 | **DONE (7a)** (2026-05-10) |
 | 8 — Multi-image | 1.5 | 17.5 | **DONE (8a)** (2026-05-10) |
-| 9 — Polish | 2 | 19.5 | **NEXT** |
-| 10 — Distribution | 1.5 | 21 | pending |
+| 9 — Polish | 2 | 19.5 | **DONE (9a)** (2026-05-10) |
+| 10 — Distribution | 1.5 | 21 | **NEXT** |
 
-**Cumulative shipped:** Phase 0–4 + Phase 5a + Phase 6a + Phase 7a + Phase 8a = ~15.5 days of plan (5b RAW develop ops, 6b AI masks, 7b canvas/composite, and 8b LLM-driven `:batch match` deferred).
+**Cumulative shipped:** Phase 0–4 + 5a + 6a + 7a + 8a + 9a = ~17.5 days of plan (5b RAW develop ops, 6b AI masks, 7b canvas/composite, 8b LLM-driven `:batch match`, and 9b history scrubbing / archival preset / modal help / extra docs all deferred).
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -620,19 +624,29 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 9 — Polish & docs. Concrete work:
+Phase 10 — Distribution & one-line install. Concrete work:
 
-1. **Undo / redo bindings on the App level** — already wired (`Ctrl+Z` / `Ctrl+Y`); audit edge cases: undo a mask op should also drop downstream ops that referenced it (or warn loudly), redo should never resurrect a stale mask reference.
-2. **History scrubbing** — click / arrow-key on the history pane to peek at any prefix of the stack; preview reflects that point. Esc returns to the live tip.
-3. **Export presets** — `:export web | print | archival` writes the current stack to disk via the existing pipeline with hard-coded sensible defaults (web = sRGB JPEG q88 long-edge 2048; print = sRGB JPEG q95 full-res; archival = sRGB TIFF 16-bit full-res). Backed by a tiny `presets.py`; LLM can call `export_save` itself if it wants finer control.
-4. **Keybindings + help overlay** — `?` opens a modal listing all chat commands and bindings.
-5. **Error surfaces** — pipeline failures during a chat turn should land in chat with a one-line summary, not crash the worker.
-6. **Docs**:
-   - `docs/install.md` — terminal setup, `ANTHROPIC_API_KEY`, supported terminals.
-   - `docs/recipes.md` — how to write your own.
-   - `docs/tools.md` — auto-generated from the JSONSchema tool surface.
-   - `docs/limitations.md` — the deferred carve-outs (5b/6b/7b/8b) and other known gaps.
+1. **PyPI publish.**
+   - GitHub Actions workflow that builds a wheel + sdist on a version-tag push and publishes via PyPI Trusted Publishing (OIDC, no stored API key).
+   - Claim the `autocam` name on PyPI before opening the public repo.
+   - First release tagged `v0.1.0` (pre-1.0 is honest for a tool this young).
+2. **`install.sh` bootstrap.**
+   - Detect `uv`; run uv's official installer if missing.
+   - `uv tool install autocam`.
+   - Print `create --help` on success with a single-line next-step hint.
+   - Hosted at a stable URL (GitHub Pages on the repo, optionally a short domain).
+3. **README `## Install` section** in preference order:
+   1. `curl -fsSL <url> | sh` (bootstrap).
+   2. `uv tool install autocam`.
+   3. `pipx install autocam`.
+4. **`create --version`** wired through to `autocam.__version__` (already in place; just bump on release).
 
-**DoD:** A first-time user, given just the README, can install, point at a photo, and edit it via natural language without hitting an unhandled error.
+**DoD:** On a clean macOS or Linux box, `curl -fsSL https://… | sh` installs AutoCam and leaves `create` on `$PATH`. No manual Python or venv steps.
 
-Phase 9 is the last UX-shaping pass before Phase 10 (distribution).
+**Risks:**
+- PyPI name availability — claim early.
+- Corporate firewalls / offline installs — keep the bootstrap minimal and document the manual `uv tool install` fallback.
+
+**Open questions:**
+- Stable host for `install.sh` — GitHub Pages off the repo, or a dedicated short domain (`autocam.sh` or similar)?
+- Windows path — WSL only for now, or attempt native via `uv`? Probably defer to a follow-up.

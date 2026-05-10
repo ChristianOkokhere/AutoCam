@@ -42,6 +42,7 @@ from autocam.pipeline.batch import (
 )
 from autocam.pipeline.color import linear_to_srgb
 from autocam.pipeline.executor import run_stack, run_stack_with_ctx
+from autocam.pipeline.presets import default_export_path, export_with_preset, get_preset
 from autocam.pipeline.stack import EditStack, source_hash
 from autocam.tui.commands import (
     AddCommand,
@@ -49,6 +50,8 @@ from autocam.tui.commands import (
     ChatMessage,
     CommandError,
     CritiqueCommand,
+    ExportCommand,
+    HelpCommand,
     MaskHideCommand,
     MaskShowCommand,
     OpenCommand,
@@ -92,6 +95,7 @@ class AutoCamApp(App[None]):
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("ctrl+z", "undo", "Undo", priority=True),
         Binding("ctrl+y", "redo", "Redo", priority=True),
+        Binding("ctrl+question_mark", "help", "Help", priority=True),
     ]
 
     def __init__(self, image_path: Path | None = None) -> None:
@@ -153,6 +157,12 @@ class AutoCamApp(App[None]):
             return
         if isinstance(cmd, BatchApplyCommand):
             self._handle_batch_apply(cmd)
+            return
+        if isinstance(cmd, ExportCommand):
+            self._handle_export(cmd)
+            return
+        if isinstance(cmd, HelpCommand):
+            self.action_help()
             return
         if isinstance(cmd, OpenCommand):
             self._handle_open(cmd.path)
@@ -425,6 +435,72 @@ class AutoCamApp(App[None]):
                 f"[{r.idx}/{r.total}] {r.source.name} FAILED: {r.error}",
                 role="error",
             )
+
+    # ── export presets ────────────────────────────────────────────────
+
+    def _handle_export(self, cmd: ExportCommand) -> None:
+        chat = self.query_one(ChatPane)
+        if not self.stack.source:
+            chat.write("no image loaded — `:open <path>` first", role="error")
+            return
+        try:
+            preset = get_preset(cmd.preset)
+        except KeyError as exc:
+            chat.write(str(exc), role="error")
+            return
+        out_path = cmd.out_path or default_export_path(self.stack.source, preset.name)
+        chat.write(f"exporting {preset.name} → {out_path}…")
+
+        def work() -> None:
+            try:
+                final = export_with_preset(
+                    stack=self.stack,
+                    preset=preset.name,
+                    out_path=out_path,
+                )
+            except (OSError, ValueError, KeyError) as exc:
+                self.call_from_thread(chat.write, f"export failed: {exc}", role="error")
+                return
+            self.call_from_thread(chat.write, f"wrote {final}")
+
+        self.run_worker(work, thread=True, exclusive=True, group="export")
+
+    # ── help overlay ──────────────────────────────────────────────────
+
+    def action_help(self) -> None:
+        chat = self.query_one(ChatPane)
+        for line in _HELP_TEXT.splitlines():
+            chat.write(line)
+
+
+_HELP_TEXT = """\
+AutoCam command reference
+─────────────────────────
+Chat (anything not starting with `:` or `/`)  → Claude vision + tool-use loop
+/deep <message>      use Claude Opus 4.7 for one turn
+/critique [text]     read-only photo critique (stack untouched)
+
+:open <path>         load a JPEG / PNG / TIFF / RAW
+:add <op> [k=v...]   manually append an op (see :help ops)
+:undo                drop the last op (Ctrl+Z)
+:redo                replay it          (Ctrl+Y)
+:mask show [target]  overlay a mask  (target = id, prefix, or `last`)
+:mask hide           clear the overlay
+:batch apply <stack> <glob> [<template>]   apply a saved stack to many files
+:export <preset>     save (preset = web / print). Default path:
+                       <name>_<preset>.jpg next to the source.
+:help                show this reference  (?)
+:quit                exit
+
+Examples
+────────
+warm the highlights and lift the shadows a touch
+darken just the sky
+give this a teal-and-orange cinematic look
+:add tone.exposure ev=0.3
+:add struct.border width_pct=2 color=#ffffff
+:export web
+"""
 
 
 def _composite_mask_overlay(display: np.ndarray, mask: np.ndarray) -> np.ndarray:

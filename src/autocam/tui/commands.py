@@ -95,6 +95,19 @@ class BatchApplyCommand:
     out_template: str = ""
 
 
+@dataclass
+class ExportCommand:
+    """``:export <preset> [<out_path>]`` — run the live stack to disk."""
+
+    preset: str
+    out_path: Path | None = None
+
+
+@dataclass
+class HelpCommand:
+    """``:help`` (or the ``?`` keybinding) — dump the command reference."""
+
+
 Command = (
     AddCommand
     | UndoCommand
@@ -106,6 +119,8 @@ Command = (
     | MaskShowCommand
     | MaskHideCommand
     | BatchApplyCommand
+    | ExportCommand
+    | HelpCommand
 )
 
 
@@ -174,6 +189,14 @@ def parse_command(line: str) -> Command:
         glob = rest[2]
         out_template = rest[3] if len(rest) > 3 else ""
         return BatchApplyCommand(stack_path=stack_path, glob=glob, out_template=out_template)
+    if verb == "export":
+        if not rest:
+            raise CommandError(":export needs a preset (web | print)")
+        preset = rest[0]
+        out_path = Path(rest[1]).expanduser() if len(rest) > 1 else None
+        return ExportCommand(preset=preset, out_path=out_path)
+    if verb == "help":
+        return HelpCommand()
     raise CommandError(f"unknown command: :{verb}")
 
 

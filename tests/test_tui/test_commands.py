@@ -111,6 +111,36 @@ def test_parse_batch_apply_too_few_args_errors() -> None:
         parse_command(":batch apply edits.json")
 
 
+def test_parse_export_with_preset() -> None:
+    from autocam.tui.commands import ExportCommand
+
+    cmd = parse_command(":export web")
+    assert isinstance(cmd, ExportCommand)
+    assert cmd.preset == "web"
+    assert cmd.out_path is None
+
+
+def test_parse_export_with_out_path() -> None:
+    from autocam.tui.commands import ExportCommand
+
+    cmd = parse_command(":export print ~/exports/final.jpg")
+    assert isinstance(cmd, ExportCommand)
+    assert cmd.preset == "print"
+    assert cmd.out_path == Path("~/exports/final.jpg").expanduser()
+
+
+def test_parse_export_without_preset_errors() -> None:
+    with pytest.raises(CommandError, match="preset"):
+        parse_command(":export")
+
+
+def test_parse_help_command() -> None:
+    from autocam.tui.commands import HelpCommand
+
+    cmd = parse_command(":help")
+    assert isinstance(cmd, HelpCommand)
+
+
 def test_parse_add_with_params() -> None:
     cmd = parse_command(":add tone.exposure ev=0.5")
     assert isinstance(cmd, AddCommand)

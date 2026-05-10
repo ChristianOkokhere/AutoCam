@@ -83,7 +83,7 @@ Best experience in terminals that speak the **Kitty graphics protocol**:
 
 ## Status
 
-**Pre-alpha — Phase 8a shipped.** Core non-destructive pipeline, three-pane Textual TUI, Claude vision + tool-use loop, curated recipe library, RAW support, masks, framing, **and multi-image batch**. `create batch --stack edits.json --in 'shoot/*.arw' --out 'export/{stem}.jpg'` processes a folder in parallel; `:batch apply` does the same inside the running TUI. Polish (history scrubbing, export presets, help overlay, docs) is next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
+**Pre-alpha — Phase 9a shipped.** Core non-destructive pipeline, three-pane Textual TUI, Claude vision + tool-use loop, curated recipe library, RAW support, masks, framing, multi-image batch, **and first-run polish**: `:export web|print` and `create export …` CLI for canned export presets, `:help` / `?` for the command reference, plus `docs/install.md` and `docs/limitations.md`. Distribution (PyPI publish, one-line install) is next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
 
 ## Quick start (future)
 

@@ -466,7 +466,11 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 7 — Structure / compositing (1–2 days) — **Status: NEXT**
+### Phase 7 — Structure / compositing (1–2 days) — **Status: DONE (7a)**
+
+**Shipped (7a):** 2026-05-10 on `feat/phase-7a-structure-resize-border-text-watermark`. Five new ops in `src/autocam/ops/structure.py` — `struct.resize` (scale / width / height with Lanczos / bilinear / nearest), `struct.pad` (per-side colour padding), `struct.border` (uniform outer border sized as a percentage of the short edge, so it lands the same on portrait + landscape), `struct.text` (Pillow ImageDraw with `load_default(size)` plus optional `font_path`, 9-anchor placement, hex / named colours), `struct.watermark` (alpha-composite a PNG / TIFF / JPEG with size relative to the short edge, opacity, and the same 9-anchor system). All five hit the auto-generated tool surface for free; system prompt grows a "Framing" section explaining the right order (scale → border → text/watermark). 13 new tests, 132 total green.
+
+**7b carved out:** `struct.canvas` (mostly redundant with pad/resize for v1) and `struct.composite` (drops another `EditStack`'s render onto the canvas — needs a layer-model JSON change) defer until there's a real demand for them.
 
 **Goal:** "Scale to 95% and add a 2% white border with a 1px hairline."
 
@@ -479,7 +483,7 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ---
 
-### Phase 8 — Multi-image / batch (1–2 days)
+### Phase 8 — Multi-image / batch (1–2 days) — **Status: NEXT**
 
 **Goal:** "Apply this look to the other 49 photos."
 
@@ -560,12 +564,12 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 | 4 — Recipes + prompt | 1.5 | 8.5 | **DONE** (2026-05-09) |
 | 5 — RAW | 2.5 | 11 | **DONE (5a)** (2026-05-09) |
 | 6 — Semantic masks | 3.5 | 14.5 | **DONE (6a)** (2026-05-10) |
-| 7 — Structure / composite | 1.5 | 16 | **NEXT** |
-| 8 — Multi-image | 1.5 | 17.5 | pending |
+| 7 — Structure / composite | 1.5 | 16 | **DONE (7a)** (2026-05-10) |
+| 8 — Multi-image | 1.5 | 17.5 | **NEXT** |
 | 9 — Polish | 2 | 19.5 | pending |
 | 10 — Distribution | 1.5 | 21 | pending |
 
-**Cumulative shipped:** Phase 0–4 + Phase 5a + Phase 6a = ~12.5 days of plan (Phase 5b RAW develop ops + Phase 6b AI masks deferred).
+**Cumulative shipped:** Phase 0–4 + Phase 5a + Phase 6a + Phase 7a = ~14 days of plan (5b RAW develop ops, 6b AI masks, and 7b canvas/composite layer model deferred).
 
 **~21 days of focused work** to a serviceable v1 (including public distribution). Phases 1–4 (8.5 days) is the usable demo. Phases 5–6 (6 days) unlock RAW and local adjustments — the point where it becomes genuinely useful to a photographer. Phase 10 is what makes it installable by someone who isn't you.
 
@@ -612,22 +616,19 @@ Each phase has a goal, deliverables, key decisions resolved inside it, risks, an
 
 ## 15. Next concrete step
 
-Phase 7 — Structure / compositing. Concrete work:
+Phase 8 — Multi-image / batch. Concrete work:
 
-1. New ops in `src/autocam/ops/structure.py`:
-   - `struct.canvas(w, h, bg)` — set a backing canvas.
-   - `struct.resize(scale | width | height)` — proportional or absolute.
-   - `struct.pad(top, right, bottom, left, color)` — uniform or per-side.
-   - `struct.border(width_pct, color)` — outer border as a percentage of the short edge.
-   - `struct.composite(layer, blend, opacity)` — drop another stack's render on top.
-   - `struct.text(content, font, size, pos, color)` — typeset text.
-   - `struct.watermark(file, pos, opacity)` — drop a watermark image.
-2. Layer model: `struct.composite` takes a `layer` ref that's an `EditStack` rendered into a transparent buffer. Layers serialize as nested stacks inside the JSON.
-3. Fonts: ship a default sans + serif (Inter or DejaVu) in `src/autocam/knowledge/fonts/`; allow user-installed fonts by absolute path.
-4. Colour parsing: accept hex (`#rrggbb` / `#rrggbbaa`) and named colours.
-5. Tool surface: existing auto-generation handles these; the system prompt grows one short section on layout intent ("scale before adding a border, otherwise you re-scale the border too").
-6. Tests: each op against a fixture, plus a multi-op stack that resizes + borders + writes "© 2026" and asserts dimensions / corner-pixel colour.
+1. `create batch` CLI subcommand:
+   - Args: `--stack edits.json`, `--in '*.jpg'` (glob, comma-or-space separated paths), `--out <dir-or-template>`.
+   - Filename templating in `--out`: tokens `{name}`, `{stem}`, `{ext}`, `{stack_id}`, `{idx}`. Default template: `{stem}_autocam.jpg`.
+   - Optional `--workers N` (default = CPU count, capped to 8).
+2. Worker pool via `concurrent.futures.ProcessPoolExecutor` — each worker loads its own model state (`load_any` + `run_stack`), so the GIL is a non-issue.
+3. Progress output: print one line per finished image (`[3/49] photo_0003.jpg → photo_0003_autocam.jpg  (1.2s)`). Errors don't abort; collect and print a summary at the end.
+4. TUI integration:
+   - New chat command `:batch apply <stack.json> <glob>` mirrors the CLI, runs in the existing worker model, streams results into the chat pane.
+   - `:batch match <ref-stack> <glob>` runs the LLM in a "match these to the reference" mode (single-shot per image) — one Claude call per image, with the reference image and one of the targets bundled into the user message. Cost-aware: cap at the first 10 images and warn before exceeding.
+5. Stack reusability: `EditStack.source` becomes optional for batch use — runtime patches it before each call. Document the new convention.
 
-**DoD:** Typing *"scale to 95% and add a 2% white border with a thin grey hairline"* causes Claude to call `struct.resize` + `struct.border` (or two borders) and the preview shows the framed photo.
+**DoD:** `create batch --stack edits.json --in 'shoot/*.arw' --out 'export/{stem}.jpg'` processes a folder of RAWs in parallel and writes JPEGs without crashing on any of them; progress lines appear as each image finishes.
 
-Phases 1–6 ops keep working — Phase 7 lives downstream of them in the stack.
+Phase 1–7 ops keep working unchanged. Phase 8 is purely a multi-source orchestrator — no new pixel-level code.

@@ -88,6 +88,29 @@ def test_parse_mask_no_subcommand_errors() -> None:
         parse_command(":mask")
 
 
+def test_parse_batch_apply_basic() -> None:
+    from autocam.tui.commands import BatchApplyCommand
+
+    cmd = parse_command(":batch apply edits.json '*.arw'")
+    assert isinstance(cmd, BatchApplyCommand)
+    assert cmd.stack_path == Path("edits.json")
+    assert cmd.glob == "*.arw"
+    assert cmd.out_template == ""
+
+
+def test_parse_batch_apply_with_template() -> None:
+    from autocam.tui.commands import BatchApplyCommand
+
+    cmd = parse_command(":batch apply edits.json '*.dng' '{stem}_done.jpg'")
+    assert isinstance(cmd, BatchApplyCommand)
+    assert cmd.out_template == "{stem}_done.jpg"
+
+
+def test_parse_batch_apply_too_few_args_errors() -> None:
+    with pytest.raises(CommandError, match="apply"):
+        parse_command(":batch apply edits.json")
+
+
 def test_parse_add_with_params() -> None:
     cmd = parse_command(":add tone.exposure ev=0.5")
     assert isinstance(cmd, AddCommand)

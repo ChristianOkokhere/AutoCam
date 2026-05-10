@@ -34,11 +34,18 @@ from autocam.llm.loop import (
     run_turn,
 )
 from autocam.ops import MaskOp
+from autocam.pipeline.batch import (
+    DEFAULT_TEMPLATE,
+    BatchResult,
+    expand_inputs,
+    run_many,
+)
 from autocam.pipeline.color import linear_to_srgb
 from autocam.pipeline.executor import run_stack, run_stack_with_ctx
 from autocam.pipeline.stack import EditStack, source_hash
 from autocam.tui.commands import (
     AddCommand,
+    BatchApplyCommand,
     ChatMessage,
     CommandError,
     CritiqueCommand,
@@ -143,6 +150,9 @@ class AutoCamApp(App[None]):
             return
         if isinstance(cmd, MaskHideCommand):
             self._handle_mask_hide()
+            return
+        if isinstance(cmd, BatchApplyCommand):
+            self._handle_batch_apply(cmd)
             return
         if isinstance(cmd, OpenCommand):
             self._handle_open(cmd.path)
@@ -374,6 +384,47 @@ class AutoCamApp(App[None]):
             if op.id == target or op.id.startswith(target):
                 return op.id
         return None
+
+    # ── batch ─────────────────────────────────────────────────────────
+
+    def _handle_batch_apply(self, cmd: BatchApplyCommand) -> None:
+        chat = self.query_one(ChatPane)
+        if not cmd.stack_path.exists():
+            chat.write(f":batch apply: stack file not found: {cmd.stack_path}", role="error")
+            return
+        sources = expand_inputs([cmd.glob])
+        if not sources:
+            chat.write(f":batch apply: no files matched {cmd.glob!r}", role="error")
+            return
+        out_template = cmd.out_template or DEFAULT_TEMPLATE
+        chat.write(f"batch: {len(sources)} file(s), template={out_template!r}")
+
+        def emit(r: BatchResult) -> None:
+            self.call_from_thread(self._batch_event, r)
+
+        def work() -> None:
+            run_many(
+                stack_path=cmd.stack_path,
+                sources=sources,
+                out_template=out_template,
+                workers=1,  # in-process inside the TUI to keep state simple
+                on_event=emit,
+            )
+            self.call_from_thread(chat.write, "batch: done.")
+
+        self.run_worker(work, thread=True, exclusive=True, group="batch")
+
+    def _batch_event(self, r: BatchResult) -> None:
+        chat = self.query_one(ChatPane)
+        if r.ok and r.output is not None:
+            chat.write(
+                f"[{r.idx}/{r.total}] {r.source.name} -> {r.output.name}  ({r.seconds:.1f}s)"
+            )
+        else:
+            chat.write(
+                f"[{r.idx}/{r.total}] {r.source.name} FAILED: {r.error}",
+                role="error",
+            )
 
 
 def _composite_mask_overlay(display: np.ndarray, mask: np.ndarray) -> np.ndarray:

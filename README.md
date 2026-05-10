@@ -83,17 +83,38 @@ Best experience in terminals that speak the **Kitty graphics protocol**:
 
 ## Status
 
-**Pre-alpha — Phase 9a shipped.** Core non-destructive pipeline, three-pane Textual TUI, Claude vision + tool-use loop, curated recipe library, RAW support, masks, framing, multi-image batch, **and first-run polish**: `:export web|print` and `create export …` CLI for canned export presets, `:help` / `?` for the command reference, plus `docs/install.md` and `docs/limitations.md`. Distribution (PyPI publish, one-line install) is next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
+**Alpha — v0.1.0.** Every phase 0–10 ships in this release: non-destructive
+pipeline, three-pane Textual TUI, Claude vision + tool-use loop, recipe
+library, RAW support, masks, framing, multi-image batch, export presets, and
+a one-line installer that runs on a clean macOS or Linux box. Deferred
+sub-phases (AI masks, history scrubbing, archival TIFF, LLM-driven batch
+match) are listed in [`docs/limitations.md`](./docs/limitations.md).
 
-## Quick start (future)
+## Install
+
+Three install paths, in order of preference:
 
 ```bash
-pip install autocam
-export ANTHROPIC_API_KEY=sk-ant-...
-create path/to/photo.arw   # launches the TUI with the photo loaded
+# 1. one-liner (uses the bootstrap installer)
+curl -fsSL https://raw.githubusercontent.com/ChristianOkokhere/AutoCam/main/install.sh | sh
+
+# 2. via uv (recommended if you have uv already)
+uv tool install autocam
+
+# 3. via pipx
+pipx install autocam
 ```
 
-The installed package is named `autocam`; the command you run is `create`.
+The installed command is `create`; the Python package is `autocam`.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...    # optional — enables NL chat
+create path/to/photo.arw                # launches the TUI with the photo
+create --help                           # full CLI surface
+```
+
+For full setup notes (Python version, terminal support, troubleshooting),
+see [`docs/install.md`](./docs/install.md).
 
 ## License
 

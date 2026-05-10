@@ -83,7 +83,7 @@ Best experience in terminals that speak the **Kitty graphics protocol**:
 
 ## Status
 
-**Pre-alpha — Phase 5a shipped.** Core non-destructive pipeline (13 ops), three-pane Textual TUI, Claude vision + tool-use loop, curated recipe library, **and RAW support** (Sony / Canon / Nikon / Fuji / Olympus / Panasonic / Pentax / Adobe DNG) all work today. With `ANTHROPIC_API_KEY` set, plain-English edits flow through the same loop on JPEG and RAW alike; `/critique` reads the photo without touching the stack. Semantic masks (skin, sky, background) are next. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
+**Pre-alpha — Phase 6a shipped.** Core non-destructive pipeline, three-pane Textual TUI, Claude vision + tool-use loop, curated recipe library, RAW support, **and local edits via masks** (luminosity bands, colour-range hue clusters, invert). With `ANTHROPIC_API_KEY` set, *"darken the sky"* or *"pull the warm tones cooler"* compose mask + adjustment automatically; `:mask show` paints a magenta overlay so you can see what's selected. AI-driven masks (skin / subject / background) come in 6b. See [`PLAN.md`](./PLAN.md) for the phased build plan and scope.
 
 ## Quick start (future)
 

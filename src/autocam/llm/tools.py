@@ -12,10 +12,11 @@ the mapping when a tool_use block comes back.
 
 from __future__ import annotations
 
+import types
 from dataclasses import MISSING, fields
-from typing import Any, Literal, get_args, get_origin, get_type_hints
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
-from autocam.ops import Op, registered_ops
+from autocam.ops import MaskOp, Op, registered_ops
 
 
 def to_tool_name(op_name: str) -> str:
@@ -53,19 +54,39 @@ def _type_to_schema(field_type: Any) -> dict[str, Any]:
     if origin is list:
         (inner,) = get_args(field_type) or (Any,)
         return {"type": "array", "items": _type_to_schema(inner)}
+    if origin is types.UnionType or origin is Union:
+        non_none = [a for a in get_args(field_type) if a is not type(None)]
+        if len(non_none) == 1:
+            return _type_to_schema(non_none[0])
 
     raise TypeError(f"unsupported field type for tool spec: {field_type!r}")
 
 
 def op_tool_spec(op_cls: type[Op]) -> dict[str, Any]:
-    """Return one Anthropic tool definition for an Op subclass."""
+    """Return one Anthropic tool definition for an Op subclass.
+
+    The ``id`` field is internal. ``mask`` is exposed for adjustment ops so
+    Claude can scope an effect through a previously-emitted mask, but hidden
+    on :class:`MaskOp` subclasses (where it has no meaning — they *produce*
+    masks, they don't consume them).
+    """
     hints = get_type_hints(op_cls)
+    skip = {"id"}
+    if issubclass(op_cls, MaskOp):
+        skip.add("mask")
+
     properties: dict[str, Any] = {}
     required: list[str] = []
     for field_def in fields(op_cls):
-        if field_def.name == "id":
+        if field_def.name in skip:
             continue
         prop = _type_to_schema(hints[field_def.name])
+        if field_def.name == "mask":
+            prop = dict(prop)
+            prop["description"] = (
+                "Optional id of a previously-emitted mask op. The effect of "
+                "this op is composited only where that mask is non-zero."
+            )
         if field_def.default is not MISSING:
             prop["default"] = field_def.default
         elif field_def.default_factory is not MISSING:  # type: ignore[misc]

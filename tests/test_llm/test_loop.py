@@ -257,6 +257,37 @@ def test_run_turn_passes_through_tool_choice_auto(fixture_jpeg: Path) -> None:
     assert "color_white_balance" in names
 
 
+def test_run_turn_tool_result_carries_op_id(fixture_jpeg: Path) -> None:
+    """Mask op id needs to come back so a follow-up tool call can reference it."""
+    stack = EditStack(source=str(fixture_jpeg))
+    fake = FakeClient(
+        [
+            FakeResponse(
+                content=[
+                    FakeBlock(
+                        type="tool_use",
+                        id="t1",
+                        name="mask_luminosity",
+                        input={"range": "highs", "feather": 0.0},
+                    ),
+                ],
+                stop_reason="tool_use",
+            ),
+            FakeResponse(content=[FakeBlock(type="text", text="ok")], stop_reason="end_turn"),
+        ]
+    )
+    run_turn(client=fake, stack=stack, user_text="mask the highlights", refresh_preview=_refresh)
+
+    second_call = fake.calls[1]
+    user_msg = second_call["messages"][-1]
+    assert user_msg["role"] == "user"
+    payload = json.loads(user_msg["content"][0]["content"])
+    assert payload["ok"] is True
+    assert payload["op_name"] == "mask.luminosity"
+    assert len(payload["op_id"]) > 0
+    assert payload["op_id"] == stack.ops[0].id
+
+
 def test_run_turn_tool_choice_none_keeps_stack_clean(fixture_jpeg: Path) -> None:
     """`/critique` mode passes tool_choice={'type': 'none'}; stack stays empty."""
     stack = EditStack(source=str(fixture_jpeg))

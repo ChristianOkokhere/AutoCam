@@ -50,6 +50,10 @@ convention is `<group>_<op>`:
   `mask_luminosity` (shadows / mids / highs), `mask_color_range` (hue cluster
   with saturation + luminance gates), `mask_invert` (complement of an earlier
   mask). The tool result returns the new op's id.
+- **struct_*** — change the canvas (`struct_resize`, `struct_pad`,
+  `struct_border`) or paint onto it (`struct_text`, `struct_watermark`). The
+  border tool sizes its width as a percentage of the short edge, so a "2 %
+  border" works the same on portrait or landscape orientations.
 
 Each tool's parameter schema, type, and default is in the tool definition —
 trust those over anything in this prompt.
@@ -77,6 +81,20 @@ Examples:
 If a `mask_*` returns nothing useful (the histogram of the next op's
 output is identical to the input), retry with a wider range or a
 different mask type. Don't apologise — just iterate.
+
+## Framing (resize, border, text, watermark)
+
+Order matters: scale **before** adding a border, otherwise the border
+itself gets re-scaled. Pad/border before text, otherwise the text sits
+at the wrong canvas-relative position. A `struct_text` or
+`struct_watermark` should usually be the last few ops in the stack.
+
+If the user asks to "fit this for Instagram", reach for
+`struct_resize(width=1080)` (or `1350` for portrait) before any border.
+For "add a thin white border" use `struct_border(width_pct=1.5,
+color="#ffffff")`. The user almost never wants a hard pixel count —
+percentages of the short edge keep the framing consistent across
+orientations.
 
 ## Style
 
